@@ -1,10 +1,10 @@
 # TECH：技术方案设计
 
 > 文件名：TECH-技术方案设计.md
-> 版本：V1.0
+> 版本：V1.1（含质疑+自我校验修订）
 > 设计角色：资深前端架构师
 > 设计日期：2025-04-15
-> Git 提交：`docs: 架构师输出技术方案`
+> 修订记录：V1.1 修正数据结构统一、SSE解析、API Key安全、CORS方案、字体CDN、错误码处理
 
 ---
 
@@ -19,7 +19,7 @@
 | 交互逻辑 | 原生 JavaScript (ES6+) | 无需构建工具，浏览器直接运行 |
 | AI 能力 | MiniMax API（OpenAI 兼容接口） | Coding Plan 提供的 API Key，使用 MiniMax-M2.7 模型 |
 | 数据存储 | localStorage | 收藏、计数、场景征集等轻量数据 |
-| 字体 | 系统字体栈 + Google Fonts (Noto Sans SC) | 中文显示优化 |
+| 字体 | 系统字体栈（无需外部字体CDN） | 避免中国大陆 Google Fonts 被墙问题 |
 
 ### 1.2 选型理由
 
@@ -634,4 +634,199 @@ async function testAPI() {
 
 > 架构师：AI 资深前端架构师
 > 设计日期：2025-04-15
-> 文档版本：V1.0
+> 文档版本：V1.1
+
+---
+
+## 附录 A：质疑+自我校验修订记录（V1.1）
+
+### A.1 模块架构说明（回应"过度设计"质疑）
+
+> **说明**：本文档中的 9 个模块（SceneModule、InputModule、AIModule 等）是**逻辑划分**，不是物理文件划分。实际代码在单个 `index.html` 文件中，以 JavaScript 函数/对象的形式组织，不使用 ES Module 的 import/export。划分模块的目的是让编码时职责清晰、便于维护，而非引入工程化复杂度。
+
+### A.2 数据结构统一修正（回应"可扩展性"质疑）
+
+**原问题**：`SCENES` 数组和 `FALLBACK_TEXTS` 对象分离，新增场景容易遗漏。
+
+**修正方案**：合并为统一结构，每个场景对象内包含自己的预设话术：
+
+```javascript
+const SCENES = [
+  {
+    id: 'salary',
+    name: '谈薪沟通',
+    icon: '💰',
+    placeholder: '例：我在公司工作了2年，承担了更多责任，想和领导谈加薪',
+    examples: ['示例1', '示例2', '示例3'],
+    // V1.1 修正：预设话术内嵌到场景对象中
+    fallbackTexts: {
+      gentle: '领导您好，想占用您一点时间聊聊薪酬的事情...',
+      firm: '领导，我想就薪酬调整和您沟通...',
+      concise: '领导，基于我在XX项目的额外贡献，申请薪资调整...',
+      humor: '领导，有个"钱"的问题想和您聊聊😂...'
+    }
+  },
+  // ... 其余场景同理
+];
+```
+
+新增场景时只需在 `SCENES` 数组中追加一个对象，无需修改其他文件。
+
+### A.3 API Key 安全处理（V1.1 修正）
+
+**原问题**：文档中直接写了完整 API Key，Git 历史会永久保留。
+
+**修正方案**：
+1. 文档中 API Key 统一使用占位符 `YOUR_API_KEY`
+2. 实际代码中 API Key 进行 Base64 编码存储
+3. `.gitignore` 中添加敏感信息提醒
+4. 代码中添加注释：`// 注意：比赛作品可接受前端存储 API Key，生产环境请使用后端代理`
+
+```javascript
+// API Key 安全处理
+const API_KEY = atob('YOUR_BASE64_ENCODED_KEY'); // Base64 解码
+```
+
+### A.4 SSE 流式解析修正（V1.1 关键修正）
+
+**原问题**：SSE 解析代码没有处理跨 chunk 的数据拼接问题。
+
+**修正方案**：使用 buffer 累积不完整行，正确处理跨 chunk 边界：
+
+```javascript
+async function streamResponse(response, onChunk) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = ''; // V1.1 修正：使用 buffer 累积不完整行
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+
+    // 最后一个元素可能是不完整的行，保留在 buffer 中
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+      const data = trimmed.slice(6);
+      if (data === '[DONE]') return;
+
+      try {
+        const parsed = JSON.parse(data);
+        const content = parsed.choices?.[0]?.delta?.content;
+        if (content) onChunk(content);
+      } catch (e) {
+        // JSON 解析失败，可能是跨 chunk 的不完整数据，忽略
+      }
+    }
+  }
+
+  // 处理 buffer 中剩余的数据
+  if (buffer.trim().startsWith('data: ') && buffer.trim() !== 'data: [DONE]') {
+    try {
+      const parsed = JSON.parse(buffer.trim().slice(6));
+      const content = parsed.choices?.[0]?.delta?.content;
+      if (content) onChunk(content);
+    } catch (e) { /* 忽略 */ }
+  }
+}
+```
+
+### A.5 CORS 风险具体方案（V1.1 修正）
+
+**原问题**："搭建简单代理"对纯前端项目不可行。
+
+**修正方案**（按优先级排序）：
+
+| 优先级 | 方案 | 说明 |
+|--------|------|------|
+| 1 | 测试 OpenAI 兼容接口 | Coding Plan 的 Key 可能已配置 CORS，优先测试 |
+| 2 | 改用 MiniMax 原生接口 | `https://api.minimax.chat/v1/text/chatcompletion?GroupId={groupId}`，可能 CORS 策略不同 |
+| 3 | 使用 CORS 代理 | 部署一个 Cloudflare Worker 或 Vercel Serverless Function 作为代理（免费额度足够） |
+| 4 | 降级为非流式 + 预设话术 | 最坏情况下，放弃 API 调用，完全使用预设话术库 |
+
+**开发前必须执行的测试**：
+```javascript
+// 测试 1：OpenAI 兼容接口 CORS
+fetch('https://api.minimax.chat/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_API_KEY'
+  },
+  body: JSON.stringify({
+    model: 'MiniMax-M2.7',
+    messages: [{ role: 'user', content: '测试' }],
+    max_tokens: 10
+  })
+}).then(r => console.log('CORS 测试:', r.ok, r.status))
+  .catch(e => console.log('CORS 失败:', e.message));
+```
+
+### A.6 Clipboard 完整兼容链（V1.1 修正）
+
+```javascript
+async function copyToClipboard(text) {
+  // 方案 1：Clipboard API（需要 HTTPS 或 localhost）
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) { /* 降级 */ }
+  }
+
+  // 方案 2：execCommand（兼容老浏览器）
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const success = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return success;
+  } catch (e) { /* 降级 */ }
+
+  // 方案 3：提示用户手动复制
+  return false; // 调用方显示"请手动复制"提示
+}
+```
+
+### A.7 API 错误码映射（V1.1 新增）
+
+```javascript
+const API_ERROR_MAP = {
+  '1000': { message: 'AI 服务出现未知错误，请稍后重试', type: 'error' },
+  '1001': { message: 'AI 响应超时，已为你展示离线话术', type: 'warning' },
+  '1002': { message: '请求过于频繁，请稍后再试', type: 'warning' },
+  '1004': { message: 'API 认证失败，请联系开发者', type: 'error' },
+  '1008': { message: 'AI 服务额度不足，已切换到离线模式', type: 'warning' },
+  '1013': { message: 'AI 服务内部错误，请稍后重试', type: 'error' },
+  '1039': { message: 'AI 服务请求量超限，请稍后重试', type: 'warning' },
+  '2013': { message: '请求格式异常，请刷新页面重试', type: 'error' }
+};
+
+function handleAPIError(error) {
+  // 尝试从响应中提取错误码
+  const errorCode = error?.body?.base_resp?.status_code;
+  if (errorCode && API_ERROR_MAP[errorCode]) {
+    return API_ERROR_MAP[errorCode];
+  }
+  // 网络错误
+  if (!navigator.onLine) {
+    return { message: '当前网络不可用，已为你展示离线话术', type: 'warning' };
+  }
+  // 默认错误
+  return { message: 'AI 生成失败，已为你展示离线话术', type: 'warning' };
+}
+```
+
+### A.8 预设话术完整性要求（V1.1 修正）
+
+**要求**：P1 阶段必须补全全部 **8 场景 × 4 语气 = 32 条**预设话术，作为降级方案的完整数据集。具体话术内容参考 PRD 附录 D。
