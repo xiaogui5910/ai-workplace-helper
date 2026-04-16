@@ -898,7 +898,23 @@
     const AIModule = {
       /** 构建 System Prompt */
       getSystemPrompt() {
-        return '你是一位拥有10年经验的职场沟通教练，精通各类职场场景的高情商表达。你的风格是：专业但不生硬，温暖但不谄媚，坚定但不冒犯。';
+        return '你是一位拥有10年经验的职场沟通教练，精通各类职场场景的高情商表达。你的风格是：专业但不生硬，温暖但不谄媚，坚定但不冒犯。重要：请直接输出话术内容，不要输出任何思考过程、分析过程或解释说明，不要使用<think沉思>标签。';
+      },
+
+      /**
+       * 过滤 MiniMax 模型返回的 <think沉思> 思考标签
+       * MiniMax-M2.7 可能返回思考过程，需要实时过滤掉
+       * @param {string} text - 包含可能的 think 标签的文本
+       * @returns {string} 过滤后的纯话术文本
+       */
+      _filterThinkTags(text) {
+        // 过滤已闭合的 <think沉思>...</think沉思> 块
+        text = text.replace(/<think沉思>[\s\S]*?<\/think沉思>/g, '');
+        // 过滤未闭合的 <think沉思>... 块（流式传输中可能尚未闭合）
+        text = text.replace(/<think沉思>[\s\S]*/g, '');
+        // 过滤 emoji 版本的思考标签（💭用户 等）
+        text = text.replace(/💭用户[\s\S]*/g, '');
+        return text;
       },
 
       /** 构建 User Prompt（M5 修复：预留 tone 参数） */
@@ -993,6 +1009,13 @@
         } catch (error) {
           if (error.name === 'AbortError') {
             if (timeoutTriggered) {
+              // 阶段7紧急修复：超时后检查结果内容是否有效
+              // 如果结果太短（<20字），说明模型只返回了思考标签或未完成，应清空并降级
+              const filteredResult = this._filterThinkTags(currentResult || '');
+              if (filteredResult.length < 20) {
+                currentResult = '';
+                $resultText.textContent = '';
+              }
               onError(new Error('AI 响应超时（5秒），请检查网络后重试'));
             } else {
               // 用户主动取消，恢复状态但不报错
@@ -1076,7 +1099,10 @@
           toneRule,
           // onChunk: 每收到一段文本
           (chunk) => {
+            // 阶段7紧急修复：过滤 MiniMax 模型的 <think沉思> 思考标签
+            // MiniMax-M2.7 可能返回 <think沉思>...</think沉思> 思考过程，需要过滤掉
             currentResult += chunk;
+            currentResult = this._filterThinkTags(currentResult);
             $resultText.textContent = currentResult;
             // 更新字数
             $resultWordCount.textContent = `${currentResult.length} 字`;
