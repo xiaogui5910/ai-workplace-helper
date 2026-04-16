@@ -1055,6 +1055,8 @@
               onError(new Error('AI 响应超时（5秒），请检查网络后重试'));
             } else {
               // 用户主动取消，恢复状态但不报错
+              // BUG#24修复：检查requestId，防止取消后立即重新生成时旧回调干扰新状态
+              if (currentRequestId !== requestId) return;
               $resultText.classList.remove('typing-cursor');
               this.setGeneratingState(false);
               isGenerating = false;
@@ -1143,8 +1145,9 @@
         $resultText.classList.add('typing-cursor');
         $resultWordCount.textContent = '';
 
-        const sceneName = currentScene.name;
-        const toneRule = currentTone.rule;
+        // BUG#26修复：使用场景快照而非全局变量，保持一致性
+        const sceneName = sceneSnapshot.name;
+        const toneRule = toneSnapshot.rule;
 
         await this.streamGenerate(
           sceneName,
@@ -1152,6 +1155,8 @@
           toneRule,
           // onChunk: 每收到一段文本
           (chunk) => {
+            // BUG#27修复：检查requestId，防止旧请求的chunk写入新请求的结果
+            if (currentRequestId !== requestId) return;
             // 阶段7紧急修复：过滤 MiniMax 模型的 <think沉思> 思考标签
             // MiniMax-M2.7 可能返回 <think沉思>...</think沉思> 思考过程，需要过滤掉
             currentResult += chunk;
@@ -1212,8 +1217,9 @@
               console.warn(`[Fallback] API失败已降级 | ${friendlyMsg} | time=${new Date().toISOString()}`);
 
               // 记录场景使用次数（降级也算使用）
-              if (currentScene) {
-                StatsModule.record(currentScene.id);
+              // BUG#25修复：使用场景快照而非全局变量，保持一致性
+              if (sceneSnapshot) {
+                StatsModule.record(sceneSnapshot.id);
               }
               // 增加限流计数
               RateLimitModule.increment();
