@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 职场嘴替工具箱 - 告别尴尬，AI 帮你说话</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', '"Noto Sans SC"', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    /* ========== 全局基础样式 ========== */
+    body {
+      background-color: #F9FAFB;
+      min-height: 100vh;
+    }
+
+    /* ========== 每日金句横幅动画 ========== */
+    .quote-banner {
+      background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+      animation: bannerFadeIn 0.6s ease-out;
+    }
+    @keyframes bannerFadeIn {
+      from { opacity: 0; transform: translateY(-100%); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .quote-banner.closing {
+      animation: bannerFadeOut 0.4s ease-in forwards;
+    }
+    @keyframes bannerFadeOut {
+      from { opacity: 1; transform: translateY(0); }
+      to { opacity: 0; transform: translateY(-100%); }
+    }
+
+    /* ========== 场景按钮样式 ========== */
+    .scene-btn {
+      transition: all 0.2s ease;
+    }
+    .scene-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+    }
+    .scene-btn.active {
+      background-color: #4F46E5;
+      color: white;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    }
+    .scene-btn.active:hover {
+      background-color: #4338CA;
+    }
+
+    /* ========== 示例按钮样式 ========== */
+    .example-btn {
+      transition: all 0.15s ease;
+    }
+    .example-btn:hover {
+      background-color: #EEF2FF;
+      border-color: #4F46E5;
+      color: #4F46E5;
+    }
+
+    /* ========== 生成按钮脉冲动画 ========== */
+    .generate-btn:not(:disabled):hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(79, 70, 229, 0.35);
+    }
+    .generate-btn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    /* ========== Loading 动画 ========== */
+    .loading-dots::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+    @keyframes dots {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+
+    /* ========== 话术展示区打字光标 ========== */
+    .typing-cursor::after {
+      content: '|';
+      animation: blink 1s step-end infinite;
+      color: #4F46E5;
+      font-weight: bold;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* ========== 话术卡片淡入 ========== */
+    .result-card {
+      animation: cardFadeIn 0.3s ease-out;
+    }
+    @keyframes cardFadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ========== 自定义场景输入框 ========== */
+    .custom-scene-input {
+      transition: all 0.3s ease;
+      overflow: hidden;
+    }
+
+    /* ========== 滚动条美化 ========== */
+    textarea::-webkit-scrollbar {
+      width: 6px;
+    }
+    textarea::-webkit-scrollbar-track {
+      background: #F3F4F6;
+      border-radius: 3px;
+    }
+    textarea::-webkit-scrollbar-thumb {
+      background: #D1D5DB;
+      border-radius: 3px;
+    }
+    textarea::-webkit-scrollbar-thumb:hover {
+      background: #9CA3AF;
+    }
+
+    /* ========== 复制成功提示 ========== */
+    .copy-toast {
+      animation: toastIn 0.3s ease-out;
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body class="font-sans text-gray-800">
+
+  <!-- ================================================================
+       每日金句横幅
+       ================================================================ -->
+  <div id="quoteBanner" class="quote-banner text-white py-3 px-4 text-center text-sm relative">
+    <button id="closeQuoteBtn" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white transition-colors text-lg leading-none" aria-label="关闭金句横幅">&times;</button>
+    <span class="mr-2">💬</span>
+    <span id="quoteText" class="inline-block max-w-[90%]"></span>
+  </div>
+
+  <!-- ================================================================
+       主容器
+       ================================================================ -->
+  <div class="max-w-[640px] mx-auto px-4 py-6">
+
+    <!-- ============================================================
+         头部标题区
+         ============================================================ -->
+    <header class="text-center mb-8">
+      <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+        🎯 AI 职场嘴替工具箱
+      </h1>
+      <p class="text-gray-500 text-sm sm:text-base">告别尴尬，AI 帮你说话</p>
+    </header>
+
+    <!-- ============================================================
+         场景选择区
+         ============================================================ -->
+    <section id="sceneSection" class="mb-6">
+      <h2 class="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-1.5">
+        <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+        选择沟通场景
+      </h2>
+      <div id="sceneGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <!-- 场景按钮由 JS 动态渲染 -->
+      </div>
+
+      <!-- 自定义场景入口 -->
+      <div class="mt-2.5">
+        <div id="customSceneToggle" class="scene-btn flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 text-sm cursor-pointer hover:border-indigo-400 hover:text-indigo-600 bg-white">
+          <span class="text-lg leading-none">+</span>
+          <span>自定义场景</span>
+        </div>
+        <div id="customSceneInput" class="custom-scene-input hidden mt-2">
+          <div class="flex gap-2">
+            <input id="customSceneName" type="text" placeholder="输入自定义场景名称，如：和老板谈远程办公" class="flex-1 px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" maxlength="20">
+            <button id="confirmCustomScene" class="px-4 py-2.5 bg-indigo-600 text-white text-sm rounded-xl hover:bg-indigo-700 transition-colors whitespace-nowrap">确定</button>
+            <button id="cancelCustomScene" class="px-3 py-2.5 bg-gray-100 text-gray-600 text-sm rounded-xl hover:bg-gray-200 transition-colors">取消</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         情境输入区
+         ============================================================ -->
+    <section id="inputSection" class="mb-4">
+      <h2 class="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-1.5">
+        <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+        描述你的情境
+      </h2>
+      <div class="relative">
+        <textarea
+          id="situationInput"
+          rows="4"
+          class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-white text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none transition-shadow"
+          placeholder="例：我在公司工作了2年，承担了更多责任，想和领导谈加薪"
+          maxlength="500"
+        ></textarea>
+        <span id="charCount" class="absolute bottom-3 right-3 text-xs text-gray-400">0/500</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         示例快速填入区
+         ============================================================ -->
+    <section id="exampleSection" class="mb-6">
+      <div class="flex flex-wrap gap-2" id="exampleButtons">
+        <!-- 示例按钮由 JS 动态渲染 -->
+      </div>
+    </section>
+
+    <!-- ============================================================
+         话术展示区
+         ============================================================ -->
+    <section id="resultSection" class="mb-6">
+      <div id="resultCard" class="result-card bg-white rounded-2xl shadow-sm border border-gray-100 p-5 min-h-[120px]">
+        <!-- 空状态 -->
+        <div id="emptyState" class="text-center py-6">
+          <div class="text-4xl mb-3">✨</div>
+          <p class="text-gray-400 text-sm">选择场景、描述情境，AI 为你生成高情商话术</p>
+        </div>
+        <!-- 生成结果 -->
+        <div id="resultContent" class="hidden">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-medium text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full" id="resultSceneTag">话术结果</span>
+            <span id="resultWordCount" class="text-xs text-gray-400"></span>
+          </div>
+          <div id="resultText" class="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap"></div>
+          <!-- 温馨提示 -->
+          <div class="mt-4 pt-3 border-t border-gray-100">
+            <p class="text-xs text-gray-400 flex items-start gap-1.5">
+              <span>💡</span>
+              <span>温馨提示：话术仅供参考，请根据实际情况灵活调整，保持真诚最重要。</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         操作按钮区
+         ============================================================ -->
+    <section id="actionSection" class="mb-8">
+      <div class="flex gap-3">
+        <button
+          id="generateBtn"
+          class="generate-btn flex-1 py-3 px-6 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-all text-sm flex items-center justify-center gap-2"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          <span id="generateBtnText">生成话术</span>
+        </button>
+        <button
+          id="copyBtn"
+          class="py-3 px-5 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition-all text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled
+        >
+          <svg id="copyIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          <span id="copyBtnText">复制</span>
+        </button>
+        <button
+          id="regenerateBtn"
+          class="py-3 px-5 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition-all text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          <span>重新生成</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         底部标识
+         ============================================================ -->
+    <footer class="text-center py-6 border-t border-gray-100">
+      <p class="text-xs text-gray-400">
+        Powered by <span class="font-semibold text-gray-500">TRAE SOLO</span> &middot; AI by <span class="font-semibold text-gray-500">MiniMax</span>
+      </p>
+    </footer>
+
+  </div>
+
+  <!-- ================================================================
+       JavaScript - 全部逻辑
+       ================================================================ -->
+  <script>
+    // ================================================================
+    // 数据定义
+    // ================================================================
+
+    /** 8大场景数据 */
+    const SCENES = [
+      { id: 'salary', name: '谈薪沟通', icon: '💰', placeholder: '例：我在公司工作了2年，承担了更多责任，想和领导谈加薪', examples: ['我在公司工作了2年，承担了更多责任，想和领导谈加薪', '入职时薪资偏低，现在想申请调薪', '跳槽拿到offer，想用这个和现公司谈涨薪留任'] },
+      { id: 'resign', name: '离职沟通', icon: '👋', placeholder: '例：我决定跳槽了，想和领导/同事友好告别', examples: ['我决定跳槽了，想和领导友好告别', '想和团队同事告别，感谢大家的帮助', '需要写一封离职邮件，好聚好散'] },
+      { id: 'refuse', name: '拒绝不合理需求', icon: '🙅', placeholder: '例：同事总让我帮他做PPT，但我自己的工作都做不完', examples: ['领导让我周末加班，但我已经安排了家庭活动', '同事总让我帮他做PPT，但我自己的工作都做不完', '其他部门的人让我帮忙做不属于我的工作'] },
+      { id: 'report', name: '向上汇报', icon: '📊', placeholder: '例：项目延期了，我需要向领导解释原因并提出解决方案', examples: ['项目延期了，需要向领导解释原因并提出解决方案', '想向领导汇报本周工作成果和下周计划', '有一个改进建议想向领导提出'] },
+      { id: 'apologize', name: '职场道歉', icon: '🙏', placeholder: '例：我在会议上说错了话，得罪了同事，想道歉', examples: ['我在会议上说错了话，得罪了同事，想道歉', '错过了一个重要的deadline，需要向领导道歉', '和同事产生了误会，想澄清并道歉'] },
+      { id: 'hr', name: 'HR/猎头沟通', icon: '🤝', placeholder: '例：猎头挖我，但我不想去，怎么委婉拒绝', examples: ['猎头挖我，但我不想去，怎么委婉拒绝', '面试后想发一封感谢信', '和HR谈薪资期望，怎么表达比较合适'] },
+      { id: 'cross', name: '跨部门协作', icon: '🔗', placeholder: '例：其他部门一直不配合，我需要推进项目但对方不给资源', examples: ['其他部门一直不配合，需要推进项目但对方不给资源', '需要跨部门借人帮忙，不知道怎么开口', '对方部门甩锅给我们，需要委婉地推回去'] },
+      { id: 'performance', name: '绩效面谈', icon: '📈', placeholder: '例：领导给我打了低绩效，我觉得不公平，想沟通', examples: ['领导给我打了低绩效，我觉得不公平，想沟通', '年终自评不知道怎么写才能突出自己的贡献', '想和领导沟通明年的绩效目标和期望'] }
+    ];
+
+    /** 每日金句数据（30条） */
+    const DAILY_QUOTES = [
+      '职场最大的能力，不是会做事，而是会说话。',
+      '高情商不是圆滑，而是让大家都舒服。',
+      '拒绝别人最好的方式，不是说不，而是给出替代方案。',
+      '会汇报的人，不一定是做得最好的，但一定是最容易被看见的。',
+      '道歉不是认输，而是给关系一个修复的机会。',
+      '谈薪不可耻，可耻的是不敢开口。',
+      '职场中没有"不好意思"，只有"不好意思说"的代价。',
+      '好聚好散，是职场人最基本的体面。',
+      '向上管理的本质，是降低领导的决策成本。',
+      '幽默是职场中最被低估的软技能。',
+      '沟通的最高境界，是让对方觉得是自己的主意。',
+      '与其抱怨不公平，不如用实力说话。',
+      '职场社交的本质是价值交换，不是请客吃饭。',
+      '会提问的人，比会回答的人更稀缺。',
+      '真正的专业，是把复杂的事情说简单。',
+      '工作中最贵的成本，是沟通成本。',
+      '不要等准备好了再开口，边说边调整才是常态。',
+      '同理心是职场沟通的超级武器。',
+      '好的反馈不是批评，而是让对方看到改进的方向。',
+      '职场上，靠谱比聪明更重要。',
+      '学会说不，才能对真正重要的事说是。',
+      '每一次尴尬的沟通，都是成长的机会。',
+      '话术是术，真诚是道，以道御术方为上策。',
+      '不要在情绪激动时做任何沟通决定。',
+      '职场上没有永远的对手，只有永远的利益。',
+      '把"我不会"换成"我可以学"，世界会大不一样。',
+      '沟通中最重要的不是表达，而是倾听。',
+      '职场中最难的不是做事，是做人。',
+      '好的开场白，成功了一半。',
+      '别让"不好意思"成为你职场最大的绊脚石。'
+    ];
+
+    /** API 配置 */
+    const API_CONFIG = {
+      url: 'https://api.minimax.chat/v1/chat/completions',
+      model: 'MiniMax-M2.7',
+      apiKey: 'sk-api-ESLfbblyEMs4j2_DU9u6QVhB7axdOP1V-hc_1lMc-pSMH_po8aDhqY6WfNrJJ8k7ONfBWkeLgI0omIjaFIwmHrl16iLuP85dYbU7KEVAgqXpdUNj18wCl-4',
+    };
+
+    // ================================================================
+    // 全局状态
+    // ================================================================
+
+    let currentScene = null;       // 当前选中的场景对象
+    let isGenerating = false;      // 是否正在生成中
+    let currentResult = '';        // 当前生成的话术结果
+    let abortController = null;    // 用于取消请求的 AbortController
+
+    // ================================================================
+    // DOM 元素引用
+    // ================================================================
+
+    const $quoteBanner = document.getElementById('quoteBanner');
+    const $closeQuoteBtn = document.getElementById('closeQuoteBtn');
+    const $quoteText = document.getElementById('quoteText');
+    const $sceneGrid = document.getElementById('sceneGrid');
+    const $customSceneToggle = document.getElementById('customSceneToggle');
+    const $customSceneInput = document.getElementById('customSceneInput');
+    const $customSceneName = document.getElementById('customSceneName');
+    const $confirmCustomScene = document.getElementById('confirmCustomScene');
+    const $cancelCustomScene = document.getElementById('cancelCustomScene');
+    const $situationInput = document.getElementById('situationInput');
+    const $charCount = document.getElementById('charCount');
+    const $exampleButtons = document.getElementById('exampleButtons');
+    const $emptyState = document.getElementById('emptyState');
+    const $resultContent = document.getElementById('resultContent');
+    const $resultSceneTag = document.getElementById('resultSceneTag');
+    const $resultWordCount = document.getElementById('resultWordCount');
+    const $resultText = document.getElementById('resultText');
+    const $generateBtn = document.getElementById('generateBtn');
+    const $generateBtnText = document.getElementById('generateBtnText');
+    const $copyBtn = document.getElementById('copyBtn');
+    const $copyBtnText = document.getElementById('copyBtnText');
+    const $copyIcon = document.getElementById('copyIcon');
+    const $regenerateBtn = document.getElementById('regenerateBtn');
+
+    // ================================================================
+    // QuoteModule - 每日金句模块
+    // ================================================================
+
+    const QuoteModule = {
+      /** 初始化金句横幅 */
+      init() {
+        // 根据日期取模选择金句
+        const today = new Date();
+        const dayOfYear = Math.floor(
+          (today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24)
+        );
+        const quoteIndex = dayOfYear % DAILY_QUOTES.length;
+        $quoteText.textContent = DAILY_QUOTES[quoteIndex];
+
+        // 关闭按钮事件
+        $closeQuoteBtn.addEventListener('click', () => {
+          $quoteBanner.classList.add('closing');
+          setTimeout(() => {
+            $quoteBanner.style.display = 'none';
+          }, 400);
+        });
+      }
+    };
+
+    // ================================================================
+    // SceneModule - 场景管理模块
+    // ================================================================
+
+    const SceneModule = {
+      /** 渲染场景按钮 */
+      renderSceneButtons() {
+        $sceneGrid.innerHTML = '';
+        SCENES.forEach(scene => {
+          const btn = document.createElement('button');
+          btn.className = 'scene-btn flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 border-gray-200 bg-white text-gray-700 text-xs sm:text-sm cursor-pointer';
+          btn.dataset.sceneId = scene.id;
+          btn.innerHTML = `<span class="text-xl sm:text-2xl">${scene.icon}</span><span class="font-medium">${scene.name}</span>`;
+          btn.addEventListener('click', () => this.selectScene(scene));
+          $sceneGrid.appendChild(btn);
+        });
+      },
+
+      /** 选中某个场景 */
+      selectScene(scene) {
+        currentScene = scene;
+
+        // 更新按钮高亮
+        document.querySelectorAll('.scene-btn').forEach(btn => {
+          btn.classList.remove('active');
+          if (btn.dataset.sceneId === scene.id) {
+            btn.classList.add('active');
+          }
+        });
+
+        // 更新输入框 placeholder（保留已有内容）
+        $situationInput.placeholder = scene.placeholder;
+
+        // 更新示例按钮
+        InputModule.renderExamples(scene.examples);
+
+        // 关闭自定义场景输入
+        $customSceneInput.classList.add('hidden');
+        $customSceneToggle.classList.remove('hidden');
+      },
+
+      /** 初始化自定义场景 */
+      initCustomScene() {
+        $customSceneToggle.addEventListener('click', () => {
+          $customSceneToggle.classList.add('hidden');
+          $customSceneInput.classList.remove('hidden');
+          $customSceneName.focus();
+        });
+
+        $cancelCustomScene.addEventListener('click', () => {
+          $customSceneInput.classList.add('hidden');
+          $customSceneToggle.classList.remove('hidden');
+          $customSceneName.value = '';
+        });
+
+        $confirmCustomScene.addEventListener('click', () => {
+          const name = $customSceneName.value.trim();
+          if (!name) {
+            $customSceneName.focus();
+            return;
+          }
+          // 创建自定义场景对象
+          const customScene = {
+            id: 'custom_' + Date.now(),
+            name: name,
+            icon: '✏️',
+            placeholder: `例：关于「${name}」，我想说...`,
+            examples: [`关于${name}，我遇到了一些困难需要沟通`, `想就${name}这个话题和对方进行有效沟通`, `在${name}的场景下，我需要一段得体的表达`],
+          };
+          this.selectScene(customScene);
+        });
+
+        // 回车确认
+        $customSceneName.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            $confirmCustomScene.click();
+          }
+          if (e.key === 'Escape') {
+            $cancelCustomScene.click();
+          }
+        });
+      },
+
+      /** 初始化模块 */
+      init() {
+        this.renderSceneButtons();
+        this.initCustomScene();
+      }
+    };
+
+    // ================================================================
+    // InputModule - 输入管理模块
+    // ================================================================
+
+    const InputModule = {
+      /** 渲染示例按钮 */
+      renderExamples(examples) {
+        $exampleButtons.innerHTML = '';
+        if (!examples || examples.length === 0) return;
+
+        const label = document.createElement('span');
+        label.className = 'text-xs text-gray-400 self-center';
+        label.textContent = '快速填入：';
+        $exampleButtons.appendChild(label);
+
+        examples.forEach(text => {
+          const btn = document.createElement('button');
+          btn.className = 'example-btn text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-500 bg-white cursor-pointer truncate max-w-[200px]';
+          btn.textContent = text;
+          btn.title = text;
+          btn.addEventListener('click', () => {
+            $situationInput.value = text;
+            this.updateCharCount();
+            $situationInput.focus();
+          });
+          $exampleButtons.appendChild(btn);
+        });
+      },
+
+      /** 更新字数统计 */
+      updateCharCount() {
+        const len = $situationInput.value.length;
+        $charCount.textContent = `${len}/500`;
+        if (len > 450) {
+          $charCount.classList.add('text-red-400');
+        } else {
+          $charCount.classList.remove('text-red-400');
+        }
+      },
+
+      /** 初始化模块 */
+      init() {
+        $situationInput.addEventListener('input', () => this.updateCharCount());
+        // 初始渲染默认场景的示例
+        this.renderExamples(SCENES[0].examples);
+      }
+    };
+
+    // ================================================================
+    // AIModule - AI 话术生成模块
+    // ================================================================
+
+    const AIModule = {
+      /** 构建 System Prompt */
+      getSystemPrompt() {
+        return '你是一位拥有10年经验的职场沟通教练，精通各类职场场景的高情商表达。你的风格是：专业但不生硬，温暖但不谄媚，坚定但不冒犯。';
+      },
+
+      /** 构建 User Prompt */
+      getUserPrompt(sceneName, userInput) {
+        return `当前场景：${sceneName}\n用户情境：${userInput}\n请生成一段80-200字的职场话术，要求：1. 表达清晰自然，口语化 2. 符合职场礼仪 3. 直接输出话术内容，不添加前缀 4. 如涉及具体数据用XX占位`;
+      },
+
+      /**
+       * 流式调用 AI 接口
+       * @param {string} sceneName - 场景名称
+       * @param {string} userInput - 用户输入的情境
+       * @param {function} onChunk - 每收到一段文本的回调
+       * @param {function} onDone - 完成回调
+       * @param {function} onError - 错误回调
+       */
+      async streamGenerate(sceneName, userInput, onChunk, onDone, onError) {
+        abortController = new AbortController();
+
+        const body = {
+          model: API_CONFIG.model,
+          messages: [
+            { role: 'system', content: this.getSystemPrompt() },
+            { role: 'user', content: this.getUserPrompt(sceneName, userInput) },
+          ],
+          stream: true,
+          temperature: 0.8,
+          max_tokens: 1024,
+        };
+
+        // 5秒超时自动降级
+        let timeoutTriggered = false;
+        const timeoutId = setTimeout(() => {
+          timeoutTriggered = true;
+          abortController.abort();
+        }, 5000);
+
+        try {
+          const response = await fetch(API_CONFIG.url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+            },
+            body: JSON.stringify(body),
+            signal: abortController.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API 请求失败 (${response.status}): ${errorText}`);
+          }
+
+          // 使用 ReadableStream 读取 SSE 数据
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            // 按行解析 SSE 数据
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // 保留不完整的行
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed === 'data: [DONE]') continue;
+              if (!trimmed.startsWith('data: ')) continue;
+
+              try {
+                const json = JSON.parse(trimmed.slice(6));
+                const delta = json.choices?.[0]?.delta?.content;
+                if (delta) {
+                  onChunk(delta);
+                }
+              } catch (e) {
+                // JSON 解析失败，跳过这一行
+                continue;
+              }
+            }
+          }
+
+          onDone();
+        } catch (error) {
+          clearTimeout(timeoutId);
+          if (error.name === 'AbortError') {
+            if (timeoutTriggered) {
+              onError(new Error('AI 响应超时（5秒），请检查网络后重试'));
+            }
+            // 用户主动取消不报错
+          } else {
+            onError(error);
+          }
+        }
+      },
+
+      /** 开始生成话术 */
+      async generate() {
+        if (isGenerating) return;
+
+        const userInput = $situationInput.value.trim();
+        if (!userInput) {
+          $situationInput.focus();
+          $situationInput.classList.add('ring-2', 'ring-red-300');
+          setTimeout(() => $situationInput.classList.remove('ring-2', 'ring-red-300'), 1500);
+          return;
+        }
+
+        if (!currentScene) {
+          // 默认选中第一个场景
+          SceneModule.selectScene(SCENES[0]);
+        }
+
+        isGenerating = true;
+        currentResult = '';
+        this.setGeneratingState(true);
+
+        // 显示结果区域
+        $emptyState.classList.add('hidden');
+        $resultContent.classList.remove('hidden');
+        $resultSceneTag.textContent = currentScene.icon + ' ' + currentScene.name;
+        $resultText.textContent = '';
+        $resultText.classList.add('typing-cursor');
+        $resultWordCount.textContent = '';
+
+        const sceneName = currentScene.name;
+
+        await this.streamGenerate(
+          sceneName,
+          userInput,
+          // onChunk: 每收到一段文本
+          (chunk) => {
+            currentResult += chunk;
+            $resultText.textContent = currentResult;
+            // 更新字数
+            $resultWordCount.textContent = `${currentResult.length} 字`;
+          },
+          // onDone: 生成完成
+          () => {
+            $resultText.classList.remove('typing-cursor');
+            this.setGeneratingState(false);
+            isGenerating = false;
+            $copyBtn.disabled = false;
+            $regenerateBtn.disabled = false;
+          },
+          // onError: 出错
+          (error) => {
+            $resultText.classList.remove('typing-cursor');
+            this.setGeneratingState(false);
+            isGenerating = false;
+
+            if (currentResult) {
+              // 已有部分内容，保留
+              $copyBtn.disabled = false;
+              $regenerateBtn.disabled = false;
+            } else {
+              $resultText.textContent = `生成失败：${error.message}\n\n请检查网络连接后重试。`;
+              $resultText.classList.add('text-red-500');
+              setTimeout(() => $resultText.classList.remove('text-red-500'), 3000);
+            }
+          }
+        );
+      },
+
+      /** 设置生成中的 UI 状态 */
+      setGeneratingState(generating) {
+        if (generating) {
+          $generateBtn.disabled = true;
+          $generateBtnText.textContent = '生成中';
+          $generateBtnText.classList.add('loading-dots');
+          $copyBtn.disabled = true;
+          $regenerateBtn.disabled = true;
+        } else {
+          $generateBtn.disabled = false;
+          $generateBtnText.textContent = '生成话术';
+          $generateBtnText.classList.remove('loading-dots');
+        }
+      },
+
+      /** 初始化模块 */
+      init() {
+        $generateBtn.addEventListener('click', () => this.generate());
+        $regenerateBtn.addEventListener('click', () => this.generate());
+      }
+    };
+
+    // ================================================================
+    // CopyModule - 复制功能模块
+    // ================================================================
+
+    const CopyModule = {
+      /** 一键复制（三级兼容） */
+      async copy() {
+        if (!currentResult) return;
+
+        const text = currentResult;
+
+        // 第一级：navigator.clipboard.writeText（需要 HTTPS 或 localhost）
+        if (navigator.clipboard && window.isSecureContext) {
+          try {
+            await navigator.clipboard.writeText(text);
+            this.showCopySuccess();
+            return;
+          } catch (e) {
+            // 降级到第二级
+          }
+        }
+
+        // 第二级：document.execCommand('copy')
+        try {
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.style.position = 'fixed';
+          textarea.style.left = '-9999px';
+          textarea.style.top = '-9999px';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          const success = document.execCommand('copy');
+          document.body.removeChild(textarea);
+          if (success) {
+            this.showCopySuccess();
+            return;
+          }
+        } catch (e) {
+          // 降级到第三级
+        }
+
+        // 第三级：提示手动复制
+        this.showManualCopyHint();
+      },
+
+      /** 显示复制成功状态 */
+      showCopySuccess() {
+        $copyBtnText.textContent = '已复制 ✓';
+        $copyBtn.classList.add('!text-green-600', '!border-green-300', '!bg-green-50');
+        setTimeout(() => {
+          $copyBtnText.textContent = '复制';
+          $copyBtn.classList.remove('!text-green-600', '!border-green-300', '!bg-green-50');
+        }, 2000);
+      },
+
+      /** 显示手动复制提示 */
+      showManualCopyHint() {
+        // 选中结果文本
+        const range = document.createRange();
+        range.selectNodeContents($resultText);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        $copyBtnText.textContent = '请手动复制';
+        setTimeout(() => {
+          $copyBtnText.textContent = '复制';
+          selection.removeAllRanges();
+        }, 3000);
+      },
+
+      /** 初始化模块 */
+      init() {
+        $copyBtn.addEventListener('click', () => this.copy());
+      }
+    };
+
+    // ================================================================
+    // 应用初始化
+    // ================================================================
+
+    (function init() {
+      QuoteModule.init();
+      SceneModule.init();
+      InputModule.init();
+      AIModule.init();
+      CopyModule.init();
+
+      // 默认选中第一个场景
+      SceneModule.selectScene(SCENES[0]);
+    })();
+  </script>
+</body>
+</html>
