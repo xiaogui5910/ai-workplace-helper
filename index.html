@@ -154,9 +154,10 @@
       transform: translateY(0);
     }
 
-    /* ========== 按钮切换 scale 动画 ========== */
+    /* ========== 按钮切换 scale 动画（补充：开启硬件加速） ========== */
     .btn-scale-anim {
       animation: btnScale 0.15s ease-out;
+      will-change: transform;
     }
     @keyframes btnScale {
       from { transform: scale(0.95); }
@@ -324,7 +325,7 @@
   <!-- ================================================================
        网络状态提示条
        ================================================================ -->
-  <div id="networkBar" class="network-bar">
+  <div id="networkBar" class="network-bar" role="alert" aria-live="assertive">
     <span id="networkBarText"></span>
   </div>
 
@@ -473,6 +474,7 @@
         <button
           id="generateBtn"
           class="generate-btn flex-1 py-3 px-6 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-all text-sm flex items-center justify-center gap-2"
+          aria-label="生成话术"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
           <span id="generateBtnText">生成话术</span>
@@ -497,6 +499,7 @@
           id="likeBtn"
           class="like-btn py-3 px-5 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition-all text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
           disabled
+          aria-label="点赞这条话术"
         >
           <span>👍</span>
           <span id="likeBtnText">点赞</span>
@@ -1133,6 +1136,7 @@
         if (generating) {
           $generateBtn.disabled = false; // 保持可点击，用于取消
           $generateBtnText.textContent = '取消生成';
+          $generateBtn.setAttribute('aria-label', '取消生成');
           // 移除原来的 loading 动画定时器（如果有）
           if (loadingTimer) {
             clearInterval(loadingTimer);
@@ -1146,6 +1150,7 @@
         } else {
           $generateBtn.disabled = false;
           $generateBtnText.textContent = '生成话术';
+          $generateBtn.setAttribute('aria-label', '生成话术');
           if (loadingTimer) {
             clearInterval(loadingTimer);
             loadingTimer = null;
@@ -1377,6 +1382,7 @@
     const StatsModule = {
       STORAGE_KEY: 'wp_scene_stats',
       MAX_DISPLAY: 3,
+      _renderTimer: null,
 
       /** 获取统计数据 */
       getStats() {
@@ -1392,7 +1398,9 @@
         const stats = this.getStats();
         stats[sceneId] = (stats[sceneId] || 0) + 1;
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(stats));
-        this.render();
+        // 补充修复：render 添加 500ms 防抖，避免高频写入+渲染
+        if (this._renderTimer) clearTimeout(this._renderTimer);
+        this._renderTimer = setTimeout(() => this.render(), 500);
       },
 
       /** 渲染热门场景排行 */
@@ -1542,13 +1550,15 @@
       STORAGE_KEY: 'wp_daily_count',
       DAILY_LIMIT: 20,
 
-      /** 获取今日计数数据 */
+      /** 获取今日计数数据（补充：异常值下限保护） */
       getDailyCount() {
         try {
           const data = JSON.parse(localStorage.getItem(this.STORAGE_KEY));
           const today = new Date().toISOString().split('T')[0];
           if (data && data.date === today) {
-            return data.count;
+            // 补充修复：负数归零，超大值截断到 DAILY_LIMIT
+            const count = typeof data.count === 'number' ? data.count : 0;
+            return Math.max(0, Math.min(count, this.DAILY_LIMIT));
           }
           // 日期不是今天，重置
           return 0;
@@ -1574,6 +1584,8 @@
           $rateLimitRemaining.textContent = `0/${this.DAILY_LIMIT}`;
           // 显示提示
           ToastModule.show('今日免费次数已用完（20/20），明天再来吧！');
+          // 补充：关键操作日志埋点
+          console.warn(`[RateLimit] 限流触发 | count=${count} | limit=${this.DAILY_LIMIT} | time=${new Date().toISOString()}`);
           return false;
         }
         return true;
@@ -1623,6 +1635,8 @@
         this.isOffline = true;
         $networkBar.className = 'network-bar offline';
         $networkBarText.textContent = '⚠️ 网络已断开，将使用离线话术';
+        // 补充：关键操作日志埋点
+        console.warn(`[Network] 网络断开 | time=${new Date().toISOString()}`);
       },
 
       /** 显示恢复提示 */
@@ -1630,6 +1644,7 @@
         this.isOffline = false;
         $networkBar.className = 'network-bar online';
         $networkBarText.textContent = '✅ 网络已恢复';
+        console.info(`[Network] 网络恢复 | time=${new Date().toISOString()}`);
         // 3秒后自动隐藏
         if (this.onlineTimer) clearTimeout(this.onlineTimer);
         this.onlineTimer = setTimeout(() => {
@@ -1680,10 +1695,13 @@
         const msg = error.message || '';
         for (const item of this.errorMap) {
           if (msg.includes(item.pattern)) {
+            // 补充：关键操作日志埋点（含错误码+上下文+时间戳）
+            console.warn(`[API Error] ${item.pattern} | ${msg.substring(0, 100)} | time=${new Date().toISOString()}`);
             return item.message;
           }
         }
         // 其他错误返回原始信息
+        console.error(`[API Error] 未映射错误 | ${msg.substring(0, 100)} | time=${new Date().toISOString()}`);
         return msg || '未知错误';
       },
 
@@ -1778,6 +1796,8 @@
         if (!this.toastEl) {
           this.toastEl = document.createElement('div');
           this.toastEl.className = 'custom-toast';
+          this.toastEl.setAttribute('role', 'status');
+          this.toastEl.setAttribute('aria-live', 'polite');
           document.body.appendChild(this.toastEl);
         }
 
