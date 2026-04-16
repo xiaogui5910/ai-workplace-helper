@@ -672,6 +672,7 @@
     let currentResult = '';        // 当前生成的话术结果
     let currentTone = TONES[0];    // 当前选中的语气，默认温和
     let abortController = null;    // 用于取消请求的 AbortController
+    let requestId = 0;             // 请求标识符，防止旧回调覆盖新状态（BUG#2修复）
     let loadingTimer = null;       // loading 省略号动画定时器
 
     // ================================================================
@@ -768,6 +769,8 @@
 
       /** 选中某个场景 */
       selectScene(scene) {
+        // BUG#4修复：生成中不允许切换场景，防止统计记录到错误场景
+        if (isGenerating) return;
         currentScene = scene;
 
         // 更新按钮高亮
@@ -822,6 +825,10 @@
             placeholder: `例：关于「${name}」，我想说...`,
             examples: [`关于${name}，我遇到了一些困难需要沟通`, `想就${name}这个话题和对方进行有效沟通`, `在${name}的场景下，我需要一段得体的表达`],
           };
+          // BUG#22修复：给自定义场景按钮添加高亮样式
+          $customSceneToggle.classList.add('active', 'border-indigo-500', 'bg-indigo-50', 'text-indigo-700');
+          $customSceneToggle.classList.remove('border-gray-300', 'text-gray-500');
+          $customSceneToggle.textContent = '✏️ ' + name;
           this.selectScene(customScene);
         });
 
@@ -933,6 +940,12 @@
         // 3. 如果仍以 💭 开头（流式中只有开始标记，超时中断）
         if (text.startsWith('\u{1F4AD}')) {
           text = '';
+        }
+
+        // BUG#7修复：如果文本中间包含 💭 但没有对应的结束标记，截断从💭到末尾的内容
+        const midThink = text.indexOf('\u{1F4AD}');
+        if (midThink !== -1) {
+          text = text.substring(0, midThink);
         }
 
         // 4. 清理开头残留的换行和空行
@@ -1061,6 +1074,12 @@
         if (isGenerating) return;
         isGenerating = true;
 
+        // BUG#2修复：递增请求ID，旧回调通过比对ID判断是否过期
+        const currentRequestId = ++requestId;
+        // BUG#4/#16修复：保存场景快照，回调中使用快照而非全局变量
+        const sceneSnapshot = currentScene;
+        const toneSnapshot = currentTone;
+
         const userInput = $situationInput.value.trim();
         if (!userInput) {
           isGenerating = false; // 校验失败，释放锁
@@ -1089,17 +1108,28 @@
           currentResult = '';
           $emptyState.classList.add('hidden');
           $resultContent.classList.remove('hidden');
-          $resultSceneTag.textContent = currentScene.icon + ' ' + currentScene.name + ' \u00B7 ' + currentTone.name;
+          $resultSceneTag.textContent = sceneSnapshot.icon + ' ' + sceneSnapshot.name + ' \u00B7 ' + toneSnapshot.name;
           $resultText.textContent = '';
           $resultWordCount.textContent = '';
-          const sceneId = currentScene ? currentScene.id : null;
-          FallbackModule.fallback(sceneId, currentTone.id);
+          // BUG#23修复：降级中禁用复制/重新生成按钮
+          $copyBtn.disabled = true;
+          $regenerateBtn.disabled = true;
+          const sceneId = sceneSnapshot ? sceneSnapshot.id : null;
+          FallbackModule.fallback(sceneId, toneSnapshot.id);
           StatsModule.record(sceneId);
-          RateLimitModule.increment();
+          // BUG#19修复：离线降级不消耗限流配额（不走API）
+          // RateLimitModule.increment(); // 已移除
           return;
         }
 
         currentResult = '';
+        // BUG#11修复：清除可能残留的打字机定时器
+        if (FallbackModule._typewriterTimer) {
+          clearInterval(FallbackModule._typewriterTimer);
+          FallbackModule._typewriterTimer = null;
+        }
+        // BUG#21修复：清除可能残留的错误样式
+        $resultText.classList.remove('text-red-500');
         this.setGeneratingState(true);
 
         // 禁用点赞按钮
@@ -1132,6 +1162,8 @@
           },
           // onDone: 生成完成
           () => {
+            // BUG#2修复：检查请求ID，忽略过期回调
+            if (currentRequestId !== requestId) return;
             $resultText.classList.remove('typing-cursor');
             this.setGeneratingState(false);
             isGenerating = false;
@@ -1139,15 +1171,17 @@
             $regenerateBtn.disabled = false;
             // 启用点赞按钮
             LikeModule.setEnabled(true);
-            // 记录场景使用次数
-            if (currentScene) {
-              StatsModule.record(currentScene.id);
+            // BUG#16修复：使用场景快照记录统计
+            if (sceneSnapshot) {
+              StatsModule.record(sceneSnapshot.id);
             }
             // 增加限流计数
             RateLimitModule.increment();
           },
           // onError: 出错
           (error) => {
+            // BUG#2修复：检查请求ID，忽略过期回调
+            if (currentRequestId !== requestId) return;
             $resultText.classList.remove('typing-cursor');
             this.setGeneratingState(false);
             isGenerating = false;
@@ -1160,9 +1194,9 @@
               $copyBtn.disabled = false;
               // 启用点赞按钮
               LikeModule.setEnabled(true);
-              // 记录场景使用次数（有部分结果也算使用）
-              if (currentScene) {
-                StatsModule.record(currentScene.id);
+              // BUG#16修复：使用场景快照记录统计
+              if (sceneSnapshot) {
+                StatsModule.record(sceneSnapshot.id);
               }
               // 增加限流计数
               RateLimitModule.increment();
@@ -1170,12 +1204,11 @@
               // 完全失败，使用 ErrorMapModule 显示友好错误
               const friendlyMsg = ErrorMapModule.getFriendlyMessage(error);
 
-              // 尝试降级到预设话术（降级会覆盖$resultText，所以先降级再显示错误提示在标题区）
-              const sceneId = currentScene ? currentScene.id : null;
-              FallbackModule.fallback(sceneId, currentTone.id);
+              // 尝试降级到预设话术
+              const sceneId = sceneSnapshot ? sceneSnapshot.id : null;
+              FallbackModule.fallback(sceneId, toneSnapshot.id);
 
-              // 阶段7修复：降级完成后在结果标题旁显示错误提示（而非$resultText内，避免被覆盖）
-              // 降级话术已展示，错误信息通过console输出即可，不打断用户体验
+              // 降级话术已展示，错误信息通过console输出即可
               console.warn(`[Fallback] API失败已降级 | ${friendlyMsg} | time=${new Date().toISOString()}`);
 
               // 记录场景使用次数（降级也算使用）
@@ -1463,6 +1496,8 @@
 
       /** 记录场景使用次数 */
       record(sceneId) {
+        // BUG#5修复：null/undefined 守卫，防止脏数据
+        if (!sceneId) return;
         const stats = this.getStats();
         stats[sceneId] = (stats[sceneId] || 0) + 1;
         try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(stats)); } catch(e) { /* 静默降级 */ }
@@ -1768,9 +1803,9 @@
             return item.message;
           }
         }
-        // 其他错误返回原始信息
+        // 其他错误返回通用友好消息（BUG#8修复：不返回原始msg，可能含敏感信息）
         console.error(`[API Error] 未映射错误 | ${msg.substring(0, 100)} | time=${new Date().toISOString()}`);
-        return msg || '未知错误';
+        return 'AI 服务暂时异常，已切换离线话术';
       },
 
       /**
@@ -1894,8 +1929,13 @@
         AIModule.setGeneratingState(false);
         isGenerating = false;
 
-        // 显示取消提示（使用 textContent 避免 XSS）
-        if (!currentResult) {
+        // BUG#3/#18修复：取消后如果有部分内容，恢复复制/重新生成按钮
+        if (currentResult) {
+          $copyBtn.disabled = false;
+          $regenerateBtn.disabled = false;
+          LikeModule.setEnabled(true);
+        } else {
+          // 没有内容，显示取消提示
           $resultText.textContent = '已取消生成';
           $resultText.classList.add('text-gray-400', 'text-center');
           setTimeout(() => {
