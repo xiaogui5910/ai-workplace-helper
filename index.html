@@ -655,12 +655,12 @@
       '别让"不好意思"成为你职场最大的绊脚石。'
     ];
 
-    /** API 配置（M1 修复：API Key Base64 编码存储） */
+    /** API 配置（API Key Base64 编码存储，运行时解码） */
     const API_CONFIG = {
       url: 'https://api.minimax.chat/v1/chat/completions',
       model: 'MiniMax-M2.7',
       // 注意：比赛作品可接受前端存储 API Key，生产环境请使用后端代理
-      apiKey: atob('c2stYXBpLUVTTGZiYmx5RU1zNGoyX0RVOXU2UVZoQjdheGRPUDFWLWhjXzFsTWMtcFNNSF9wbzhhRGhxWTZXZk5ySko4azdPTmZCV2tlTGdJMG9tSWphRkl3bUhybDE2aUx1UDg1ZFliVTdLRVZBZ3FYcGRVTmoxOHdDbC00'),
+      apiKey: atob('c2stYXBpLWROMWpNNWpHVzZuVFE2eW9vLVJWajRBcHlKZi1NdkxQYkMtVmcxd0xiNHd0Y1M0dWItazZsMUpzOVplY1ktcjN0bWFVdk0zSmtlUUl1UkZTeHIwb1ZxNmVja1o5QmpWVnFQSHlDenRyZlZCN2wwQWZMQTh4Ylhj'),
     };
 
     // ================================================================
@@ -1074,6 +1074,13 @@
       async generate() {
         // 阶段7修复：提前锁定状态，防止竞态条件
         if (isGenerating) return;
+
+        // 强化限流：1秒内不允许重复发起请求
+        if (RateLimitModule._isTooFrequent()) {
+          ToastModule.show('操作太频繁，请稍后再试');
+          return;
+        }
+
         isGenerating = true;
 
         // BUG#2修复：递增请求ID，旧回调通过比对ID判断是否过期
@@ -1658,6 +1665,17 @@
     const RateLimitModule = {
       STORAGE_KEY: 'wp_daily_count',
       DAILY_LIMIT: 20,
+      _lastRequestTime: 0, // 强化限流：1秒防抖，记录上次请求时间戳
+
+      /** 检查是否在1秒内重复请求（强化限流） */
+      _isTooFrequent() {
+        const now = Date.now();
+        if (now - this._lastRequestTime < 1000) {
+          return true;
+        }
+        this._lastRequestTime = now;
+        return false;
+      },
 
       /** 获取今日计数数据（补充：异常值下限保护） */
       getDailyCount() {
