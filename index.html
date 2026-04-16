@@ -155,9 +155,11 @@
     }
 
     /* ========== 按钮切换 scale 动画（补充：开启硬件加速） ========== */
+    .scene-btn, #toneButtons button {
+      will-change: transform;
+    }
     .btn-scale-anim {
       animation: btnScale 0.15s ease-out;
-      will-change: transform;
     }
     @keyframes btnScale {
       from { transform: scale(0.95); }
@@ -1009,10 +1011,13 @@
 
       /** 开始生成话术 */
       async generate() {
+        // 阶段7修复：提前锁定状态，防止竞态条件
         if (isGenerating) return;
+        isGenerating = true;
 
         const userInput = $situationInput.value.trim();
         if (!userInput) {
+          isGenerating = false; // 校验失败，释放锁
           $situationInput.focus();
           $situationInput.classList.add('ring-2', 'ring-red-300');
           setTimeout(() => $situationInput.classList.remove('ring-2', 'ring-red-300'), 1500);
@@ -1026,6 +1031,7 @@
 
         // 限流检查
         if (!RateLimitModule.check()) {
+          isGenerating = false; // 限流，释放锁
           $generateBtn.disabled = true;
           $generateBtnText.textContent = '今日次数已用完';
           return;
@@ -1033,6 +1039,7 @@
 
         // 断网时直接走降级逻辑，不等待超时
         if (NetworkModule.isOffline) {
+          isGenerating = false; // 降级不经过API，释放锁
           currentResult = '';
           $emptyState.classList.add('hidden');
           $resultContent.classList.remove('hidden');
@@ -1046,7 +1053,6 @@
           return;
         }
 
-        isGenerating = true;
         currentResult = '';
         this.setGeneratingState(true);
 
@@ -1114,11 +1120,14 @@
             } else {
               // 完全失败，使用 ErrorMapModule 显示友好错误
               const friendlyMsg = ErrorMapModule.getFriendlyMessage(error);
-              ErrorMapModule.showError(friendlyMsg);
 
-              // 尝试降级到预设话术
+              // 尝试降级到预设话术（降级会覆盖$resultText，所以先降级再显示错误提示在标题区）
               const sceneId = currentScene ? currentScene.id : null;
               FallbackModule.fallback(sceneId, currentTone.id);
+
+              // 阶段7修复：降级完成后在结果标题旁显示错误提示（而非$resultText内，避免被覆盖）
+              // 降级话术已展示，错误信息通过console输出即可，不打断用户体验
+              console.warn(`[Fallback] API失败已降级 | ${friendlyMsg} | time=${new Date().toISOString()}`);
 
               // 记录场景使用次数（降级也算使用）
               if (currentScene) {
@@ -1292,6 +1301,8 @@
 
         // 如果已有生成内容，自动重新生成
         if (currentResult && !isGenerating) {
+          // 阶段7修复：清空旧结果，避免onError路径判断异常
+          currentResult = '';
           AIModule.generate();
         }
       },
@@ -1307,6 +1318,8 @@
     // ================================================================
 
     const FallbackModule = {
+      _typewriterTimer: null, // 阶段7修复：保存打字机定时器引用，防止快速操作导致冲突
+
       /**
        * 获取预设降级话术
        * @param {string} sceneId - 场景ID
@@ -1327,19 +1340,25 @@
        * @param {function} onComplete - 完成回调
        */
       typewriterShow(text, onComplete) {
+        // 阶段7修复：清除旧的打字机定时器，防止快速操作导致冲突
+        if (this._typewriterTimer) {
+          clearInterval(this._typewriterTimer);
+          this._typewriterTimer = null;
+        }
         currentResult = '';
         $resultText.textContent = '';
         $resultText.classList.add('typing-cursor');
 
         let index = 0;
-        const timer = setInterval(() => {
+        this._typewriterTimer = setInterval(() => {
           if (index < text.length) {
             currentResult += text[index];
             $resultText.textContent = currentResult;
             $resultWordCount.textContent = `${currentResult.length} 字`;
             index++;
           } else {
-            clearInterval(timer);
+            clearInterval(this._typewriterTimer);
+            this._typewriterTimer = null;
             $resultText.classList.remove('typing-cursor');
             $copyBtn.disabled = false;
             $regenerateBtn.disabled = false;
@@ -1397,7 +1416,7 @@
       record(sceneId) {
         const stats = this.getStats();
         stats[sceneId] = (stats[sceneId] || 0) + 1;
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(stats));
+        try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(stats)); } catch(e) { /* 静默降级 */ }
         // 补充修复：render 添加 500ms 防抖，避免高频写入+渲染
         if (this._renderTimer) clearTimeout(this._renderTimer);
         this._renderTimer = setTimeout(() => this.render(), 500);
@@ -1507,7 +1526,7 @@
           likes[key] = { count: count + 1, liked: true };
         }
 
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(likes));
+        try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(likes)); } catch(e) { /* 静默降级 */ }
         this.updateUI();
       },
 
@@ -1571,7 +1590,7 @@
       increment() {
         const today = new Date().toISOString().split('T')[0];
         const count = this.getDailyCount() + 1;
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify({ date: today, count }));
+        try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify({ date: today, count })); } catch(e) { /* 静默降级 */ }
         this.updateUI();
       },
 
@@ -1752,7 +1771,7 @@
           text: text,
           time: new Date().toISOString()
         });
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(suggestions));
+        try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(suggestions)); } catch(e) { /* 静默降级 */ }
 
         // 清空输入框
         $suggestInput.value = '';
