@@ -130,9 +130,203 @@
       from { opacity: 0; transform: scale(0.9); }
       to { opacity: 1; transform: scale(1); }
     }
+
+    /* ========== 网络状态提示条 ========== */
+    .network-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      padding: 8px 16px;
+      text-align: center;
+      font-size: 13px;
+      color: white;
+      transform: translateY(-100%);
+      transition: transform 0.3s ease;
+    }
+    .network-bar.offline {
+      background-color: #DC2626;
+      transform: translateY(0);
+    }
+    .network-bar.online {
+      background-color: #16A34A;
+      transform: translateY(0);
+    }
+
+    /* ========== 按钮切换 scale 动画 ========== */
+    .btn-scale-anim {
+      animation: btnScale 0.15s ease-out;
+    }
+    @keyframes btnScale {
+      from { transform: scale(0.95); }
+      to { transform: scale(1); }
+    }
+
+    /* ========== 热门场景排行卡片 ========== */
+    .stats-card {
+      background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+      border: 1px solid #C7D2FE;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 12px;
+    }
+    .stats-card .stats-toggle {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      user-select: none;
+      color: #4338CA;
+      font-weight: 500;
+    }
+    .stats-card .stats-toggle .arrow {
+      transition: transform 0.2s ease;
+      font-size: 10px;
+    }
+    .stats-card .stats-toggle .arrow.collapsed {
+      transform: rotate(-90deg);
+    }
+    .stats-card .stats-list {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow: hidden;
+      transition: max-height 0.3s ease, opacity 0.3s ease;
+    }
+    .stats-card .stats-list.collapsed {
+      max-height: 0;
+      opacity: 0;
+      margin-top: 0;
+    }
+    .stats-card .stats-list:not(.collapsed) {
+      max-height: 200px;
+      opacity: 1;
+    }
+    .stats-card .stats-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #4338CA;
+      padding: 2px 0;
+    }
+    .stats-card .stats-item .rank {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .stats-card .stats-item .rank.gold { background: #FBBF24; color: #78350F; }
+    .stats-card .stats-item .rank.silver { background: #D1D5DB; color: #374151; }
+    .stats-card .stats-item .rank.bronze { background: #FCD34D; color: #78350F; }
+    .stats-card .stats-item .count {
+      margin-left: auto;
+      background: #C7D2FE;
+      color: #3730A3;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    /* ========== 点赞按钮 ========== */
+    .like-btn {
+      transition: all 0.2s ease;
+    }
+    .like-btn.liked {
+      color: #DC2626 !important;
+      border-color: #FCA5A5 !important;
+      background-color: #FEF2F2 !important;
+    }
+    .like-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* ========== 限流提示 ========== */
+    .rate-limit-badge {
+      font-size: 11px;
+      color: #6B7280;
+      text-align: center;
+      margin-top: 6px;
+    }
+    .rate-limit-badge .remaining {
+      color: #4F46E5;
+      font-weight: 600;
+    }
+    .rate-limit-badge.exhausted {
+      color: #DC2626;
+      font-weight: 500;
+    }
+
+    /* ========== 场景征集区域 ========== */
+    .suggest-area {
+      background: #F9FAFB;
+      border: 1px dashed #D1D5DB;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    .suggest-area input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #D1D5DB;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .suggest-area input:focus {
+      border-color: #4F46E5;
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+    }
+
+    /* ========== Toast 提示 ========== */
+    .custom-toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #1F2937;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      z-index: 9999;
+      opacity: 0;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+    .custom-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ========== 错误提示文字 ========== */
+    .error-message {
+      color: #DC2626;
+      font-size: 13px;
+      padding: 8px 12px;
+      background: #FEF2F2;
+      border-radius: 8px;
+      border: 1px solid #FECACA;
+    }
   </style>
 </head>
 <body class="font-sans text-gray-800">
+
+  <!-- ================================================================
+       网络状态提示条
+       ================================================================ -->
+  <div id="networkBar" class="network-bar">
+    <span id="networkBarText"></span>
+  </div>
 
   <!-- ================================================================
        每日金句横幅
@@ -182,6 +376,21 @@
             <button id="confirmCustomScene" class="px-4 py-2.5 bg-indigo-600 text-white text-sm rounded-xl hover:bg-indigo-700 transition-colors whitespace-nowrap">确定</button>
             <button id="cancelCustomScene" class="px-3 py-2.5 bg-gray-100 text-gray-600 text-sm rounded-xl hover:bg-gray-200 transition-colors">取消</button>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         热门场景排行
+         ============================================================ -->
+    <section id="statsSection" class="mb-6 hidden">
+      <div class="stats-card">
+        <div id="statsToggle" class="stats-toggle">
+          <span>🔥 热门场景</span>
+          <span id="statsArrow" class="arrow">▼</span>
+        </div>
+        <div id="statsList" class="stats-list">
+          <!-- 排行项由 JS 动态渲染 -->
         </div>
       </div>
     </section>
@@ -284,6 +493,34 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
           <span>重新生成</span>
         </button>
+        <button
+          id="likeBtn"
+          class="like-btn py-3 px-5 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition-all text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled
+        >
+          <span>👍</span>
+          <span id="likeBtnText">点赞</span>
+          <span id="likeCount" class="text-xs"></span>
+        </button>
+      </div>
+      <!-- 限流提示 -->
+      <div id="rateLimitBadge" class="rate-limit-badge">
+        今日剩余：<span id="rateLimitRemaining" class="remaining">20/20</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         场景征集
+         ============================================================ -->
+    <section id="suggestSection" class="mb-6">
+      <div class="suggest-area">
+        <p class="text-sm text-gray-600 font-medium mb-3">
+          💡 你还想要什么场景？<span id="suggestCount" class="text-xs text-gray-400 font-normal"></span>
+        </p>
+        <div class="flex gap-2">
+          <input id="suggestInput" type="text" placeholder="输入你想要的场景，如：和甲方催款" maxlength="100">
+          <button id="suggestBtn" class="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap">提交建议</button>
+        </div>
       </div>
     </section>
 
@@ -294,6 +531,7 @@
       <p class="text-xs text-gray-400">
         Powered by <span class="font-semibold text-gray-500">TRAE SOLO</span> &middot; AI by <span class="font-semibold text-gray-500">MiniMax</span>
       </p>
+      <p class="text-xs text-gray-300 mt-2">觉得好用？分享给你的职场搭子 👇</p>
     </footer>
 
   </div>
@@ -457,6 +695,20 @@
     const $copyBtn = document.getElementById('copyBtn');
     const $copyBtnText = document.getElementById('copyBtnText');
     const $regenerateBtn = document.getElementById('regenerateBtn');
+    const $likeBtn = document.getElementById('likeBtn');
+    const $likeBtnText = document.getElementById('likeBtnText');
+    const $likeCount = document.getElementById('likeCount');
+    const $rateLimitBadge = document.getElementById('rateLimitBadge');
+    const $rateLimitRemaining = document.getElementById('rateLimitRemaining');
+    const $networkBar = document.getElementById('networkBar');
+    const $networkBarText = document.getElementById('networkBarText');
+    const $statsSection = document.getElementById('statsSection');
+    const $statsToggle = document.getElementById('statsToggle');
+    const $statsArrow = document.getElementById('statsArrow');
+    const $statsList = document.getElementById('statsList');
+    const $suggestInput = document.getElementById('suggestInput');
+    const $suggestBtn = document.getElementById('suggestBtn');
+    const $suggestCount = document.getElementById('suggestCount');
 
     // ================================================================
     // QuoteModule - 每日金句模块
@@ -518,6 +770,11 @@
           btn.classList.remove('active');
           if (btn.dataset.sceneId === scene.id) {
             btn.classList.add('active');
+            // A3: 添加 scale 切换动画
+            btn.classList.remove('btn-scale-anim');
+            // 触发 reflow 以重新播放动画
+            void btn.offsetWidth;
+            btn.classList.add('btn-scale-anim');
           }
         });
 
@@ -764,9 +1021,34 @@
           SceneModule.selectScene(SCENES[0]);
         }
 
+        // 限流检查
+        if (!RateLimitModule.check()) {
+          $generateBtn.disabled = true;
+          $generateBtnText.textContent = '今日次数已用完';
+          return;
+        }
+
+        // 断网时直接走降级逻辑，不等待超时
+        if (NetworkModule.isOffline) {
+          currentResult = '';
+          $emptyState.classList.add('hidden');
+          $resultContent.classList.remove('hidden');
+          $resultSceneTag.textContent = currentScene.icon + ' ' + currentScene.name + ' \u00B7 ' + currentTone.name;
+          $resultText.textContent = '';
+          $resultWordCount.textContent = '';
+          const sceneId = currentScene ? currentScene.id : null;
+          FallbackModule.fallback(sceneId, currentTone.id);
+          StatsModule.record(sceneId);
+          RateLimitModule.increment();
+          return;
+        }
+
         isGenerating = true;
         currentResult = '';
         this.setGeneratingState(true);
+
+        // 禁用点赞按钮
+        LikeModule.setEnabled(false);
 
         // 显示结果区域
         $emptyState.classList.add('hidden');
@@ -797,6 +1079,14 @@
             isGenerating = false;
             $copyBtn.disabled = false;
             $regenerateBtn.disabled = false;
+            // 启用点赞按钮
+            LikeModule.setEnabled(true);
+            // 记录场景使用次数
+            if (currentScene) {
+              StatsModule.record(currentScene.id);
+            }
+            // 增加限流计数
+            RateLimitModule.increment();
           },
           // onError: 出错
           (error) => {
@@ -810,10 +1100,29 @@
             if (currentResult) {
               // 已有部分内容，保留并允许复制
               $copyBtn.disabled = false;
+              // 启用点赞按钮
+              LikeModule.setEnabled(true);
+              // 记录场景使用次数（有部分结果也算使用）
+              if (currentScene) {
+                StatsModule.record(currentScene.id);
+              }
+              // 增加限流计数
+              RateLimitModule.increment();
             } else {
-              // 完全失败，尝试降级到预设话术
+              // 完全失败，使用 ErrorMapModule 显示友好错误
+              const friendlyMsg = ErrorMapModule.getFriendlyMessage(error);
+              ErrorMapModule.showError(friendlyMsg);
+
+              // 尝试降级到预设话术
               const sceneId = currentScene ? currentScene.id : null;
               FallbackModule.fallback(sceneId, currentTone.id);
+
+              // 记录场景使用次数（降级也算使用）
+              if (currentScene) {
+                StatsModule.record(currentScene.id);
+              }
+              // 增加限流计数
+              RateLimitModule.increment();
             }
           }
         );
@@ -822,16 +1131,18 @@
       /** 设置生成中的 UI 状态 */
       setGeneratingState(generating) {
         if (generating) {
-          $generateBtn.disabled = true;
-          $generateBtnText.textContent = '生成中';
-          // H5 修复：用 JS 实现 loading 省略号动画
-          let dotCount = 0;
-          loadingTimer = setInterval(() => {
-            dotCount = (dotCount + 1) % 4;
-            $generateBtnText.textContent = '生成中' + '.'.repeat(dotCount);
-          }, 400);
+          $generateBtn.disabled = false; // 保持可点击，用于取消
+          $generateBtnText.textContent = '取消生成';
+          // 移除原来的 loading 动画定时器（如果有）
+          if (loadingTimer) {
+            clearInterval(loadingTimer);
+            loadingTimer = null;
+          }
+          // 生成中点击按钮变为取消操作
+          $generateBtn.onclick = () => CancelModule.cancel();
           $copyBtn.disabled = true;
           $regenerateBtn.disabled = true;
+          LikeModule.setEnabled(false);
         } else {
           $generateBtn.disabled = false;
           $generateBtnText.textContent = '生成话术';
@@ -839,12 +1150,14 @@
             clearInterval(loadingTimer);
             loadingTimer = null;
           }
+          // 恢复生成按钮的原始点击事件
+          $generateBtn.onclick = () => this.generate();
         }
       },
 
       /** 初始化模块 */
       init() {
-        $generateBtn.addEventListener('click', () => this.generate());
+        $generateBtn.onclick = () => this.generate();
         $regenerateBtn.addEventListener('click', () => this.generate());
       }
     };
@@ -962,6 +1275,10 @@
           if (btn.dataset.toneId === tone.id) {
             btn.classList.remove('border-gray-200', 'text-gray-500', 'bg-white');
             btn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600');
+            // A3: 添加 scale 切换动画
+            btn.classList.remove('btn-scale-anim');
+            void btn.offsetWidth;
+            btn.classList.add('btn-scale-anim');
           } else {
             btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600');
             btn.classList.add('border-gray-200', 'text-gray-500', 'bg-white');
@@ -1021,6 +1338,8 @@
             $resultText.classList.remove('typing-cursor');
             $copyBtn.disabled = false;
             $regenerateBtn.disabled = false;
+            // P2 修复：降级完成后启用点赞按钮
+            LikeModule.setEnabled(true);
             if (onComplete) onComplete();
           }
         }, 20); // 每字20ms
@@ -1052,6 +1371,453 @@
     };
 
     // ================================================================
+    // StatsModule - 热门场景排行模块 (P2-02)
+    // ================================================================
+
+    const StatsModule = {
+      STORAGE_KEY: 'wp_scene_stats',
+      MAX_DISPLAY: 3,
+
+      /** 获取统计数据 */
+      getStats() {
+        try {
+          return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || {};
+        } catch (e) {
+          return {};
+        }
+      },
+
+      /** 记录场景使用次数 */
+      record(sceneId) {
+        const stats = this.getStats();
+        stats[sceneId] = (stats[sceneId] || 0) + 1;
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(stats));
+        this.render();
+      },
+
+      /** 渲染热门场景排行 */
+      render() {
+        const stats = this.getStats();
+        // 过滤使用次数 > 0 的场景，按次数降序排列
+        const sorted = Object.entries(stats)
+          .filter(([, count]) => count > 0)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, this.MAX_DISPLAY);
+
+        if (sorted.length === 0) {
+          $statsSection.classList.add('hidden');
+          return;
+        }
+
+        $statsSection.classList.remove('hidden');
+        $statsList.innerHTML = '';
+
+        const rankClasses = ['gold', 'silver', 'bronze'];
+        sorted.forEach(([sceneId, count], index) => {
+          // 查找场景信息
+          const scene = SCENES.find(s => s.id === sceneId);
+          if (!scene) return;
+
+          const item = document.createElement('div');
+          item.className = 'stats-item';
+
+          const rankSpan = document.createElement('span');
+          rankSpan.className = 'rank ' + (rankClasses[index] || '');
+          rankSpan.textContent = index + 1;
+
+          const iconSpan = document.createElement('span');
+          iconSpan.textContent = scene.icon;
+
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = scene.name;
+
+          const countSpan = document.createElement('span');
+          countSpan.className = 'count';
+          countSpan.textContent = count + '次';
+
+          item.appendChild(rankSpan);
+          item.appendChild(iconSpan);
+          item.appendChild(nameSpan);
+          item.appendChild(countSpan);
+          $statsList.appendChild(item);
+        });
+      },
+
+      /** 初始化模块 */
+      init() {
+        // 折叠/展开切换
+        $statsToggle.addEventListener('click', () => {
+          const isCollapsed = $statsList.classList.toggle('collapsed');
+          $statsArrow.classList.toggle('collapsed', isCollapsed);
+        });
+        this.render();
+      }
+    };
+
+    // ================================================================
+    // LikeModule - 话术点赞模块 (P2-04)
+    // ================================================================
+
+    const LikeModule = {
+      STORAGE_KEY: 'wp_likes',
+
+      /** 获取所有点赞数据 */
+      getLikes() {
+        try {
+          return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || {};
+        } catch (e) {
+          return {};
+        }
+      },
+
+      /** 生成点赞唯一key（场景ID + 语气ID + 话术内容前20字） */
+      getLikeKey(sceneId, toneId, text) {
+        const prefix = text.substring(0, 20);
+        return `${sceneId}_${toneId}_${prefix}`;
+      },
+
+      /** 获取当前结果的点赞状态 */
+      getCurrentLikeState() {
+        if (!currentScene || !currentResult) return { key: null, count: 0, liked: false };
+        const key = this.getLikeKey(currentScene.id, currentTone.id, currentResult);
+        const likes = this.getLikes();
+        const data = likes[key] || { count: 0, liked: false };
+        return { key, count: data.count, liked: data.liked };
+      },
+
+      /** 切换点赞状态 */
+      toggle() {
+        if (!currentScene || !currentResult) return;
+        const { key, count, liked } = this.getCurrentLikeState();
+        const likes = this.getLikes();
+
+        if (liked) {
+          // 取消点赞
+          likes[key] = { count: Math.max(0, count - 1), liked: false };
+        } else {
+          // 点赞
+          likes[key] = { count: count + 1, liked: true };
+        }
+
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(likes));
+        this.updateUI();
+      },
+
+      /** 更新点赞按钮UI */
+      updateUI() {
+        const { count, liked } = this.getCurrentLikeState();
+        if (liked) {
+          $likeBtn.classList.add('liked');
+          $likeBtnText.textContent = '已赞';
+        } else {
+          $likeBtn.classList.remove('liked');
+          $likeBtnText.textContent = '点赞';
+        }
+        $likeCount.textContent = count > 0 ? count : '';
+      },
+
+      /** 启用/禁用点赞按钮 */
+      setEnabled(enabled) {
+        $likeBtn.disabled = !enabled;
+        if (enabled) {
+          this.updateUI();
+        } else {
+          $likeBtn.classList.remove('liked');
+          $likeBtnText.textContent = '点赞';
+          $likeCount.textContent = '';
+        }
+      },
+
+      /** 初始化模块 */
+      init() {
+        $likeBtn.addEventListener('click', () => this.toggle());
+      }
+    };
+
+    // ================================================================
+    // RateLimitModule - 前端限流模块 (P2-07)
+    // ================================================================
+
+    const RateLimitModule = {
+      STORAGE_KEY: 'wp_daily_count',
+      DAILY_LIMIT: 20,
+
+      /** 获取今日计数数据 */
+      getDailyCount() {
+        try {
+          const data = JSON.parse(localStorage.getItem(this.STORAGE_KEY));
+          const today = new Date().toISOString().split('T')[0];
+          if (data && data.date === today) {
+            return data.count;
+          }
+          // 日期不是今天，重置
+          return 0;
+        } catch (e) {
+          return 0;
+        }
+      },
+
+      /** 增加今日计数 */
+      increment() {
+        const today = new Date().toISOString().split('T')[0];
+        const count = this.getDailyCount() + 1;
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify({ date: today, count }));
+        this.updateUI();
+      },
+
+      /** 检查是否还能生成 */
+      check() {
+        const count = this.getDailyCount();
+        if (count >= this.DAILY_LIMIT) {
+          // 达到上限，只更新UI和提示，不操作按钮（由调用方决定）
+          $rateLimitBadge.classList.add('exhausted');
+          $rateLimitRemaining.textContent = `0/${this.DAILY_LIMIT}`;
+          // 显示提示
+          ToastModule.show('今日免费次数已用完（20/20），明天再来吧！');
+          return false;
+        }
+        return true;
+      },
+
+      /** 更新限流UI显示 */
+      updateUI() {
+        const count = this.getDailyCount();
+        const remaining = this.DAILY_LIMIT - count;
+        $rateLimitRemaining.textContent = `${remaining}/${this.DAILY_LIMIT}`;
+
+        if (remaining <= 0) {
+          $rateLimitBadge.classList.add('exhausted');
+          $rateLimitRemaining.classList.remove('remaining');
+          $generateBtn.disabled = true;
+          $generateBtnText.textContent = '今日次数已用完';
+        } else if (remaining <= 5) {
+          $rateLimitBadge.classList.remove('exhausted');
+          $rateLimitRemaining.style.color = '#DC2626';
+        } else {
+          $rateLimitBadge.classList.remove('exhausted');
+          $rateLimitRemaining.style.color = '';
+        }
+      },
+
+      /** 初始化模块 */
+      init() {
+        this.updateUI();
+      }
+    };
+
+    // ================================================================
+    // NetworkModule - 网络状态检测模块 (S1)
+    // ================================================================
+
+    const NetworkModule = {
+      isOffline: false,
+      onlineTimer: null,
+
+      /** 检查当前网络状态 */
+      checkOnline() {
+        return navigator.onLine;
+      },
+
+      /** 显示断网提示 */
+      showOffline() {
+        this.isOffline = true;
+        $networkBar.className = 'network-bar offline';
+        $networkBarText.textContent = '⚠️ 网络已断开，将使用离线话术';
+      },
+
+      /** 显示恢复提示 */
+      showOnline() {
+        this.isOffline = false;
+        $networkBar.className = 'network-bar online';
+        $networkBarText.textContent = '✅ 网络已恢复';
+        // 3秒后自动隐藏
+        if (this.onlineTimer) clearTimeout(this.onlineTimer);
+        this.onlineTimer = setTimeout(() => {
+          $networkBar.className = 'network-bar';
+        }, 3000);
+      },
+
+      /** 初始化模块 */
+      init() {
+        // 初始状态检查
+        if (!navigator.onLine) {
+          this.showOffline();
+        }
+
+        window.addEventListener('offline', () => {
+          if (this.onlineTimer) clearTimeout(this.onlineTimer);
+          this.showOffline();
+        });
+
+        window.addEventListener('online', () => {
+          this.showOnline();
+        });
+      }
+    };
+
+    // ================================================================
+    // ErrorMapModule - API错误码处理模块 (S4)
+    // ================================================================
+
+    const ErrorMapModule = {
+      /** 错误码映射表 */
+      errorMap: [
+        { pattern: '401', message: 'API认证失败，请检查配置' },
+        { pattern: '429', message: '请求过于频繁，请稍后再试' },
+        { pattern: '500', message: 'AI服务暂时不可用，请稍后再试' },
+        { pattern: '502', message: 'AI服务维护中，请稍后再试' },
+        { pattern: '503', message: 'AI服务维护中，请稍后再试' },
+        { pattern: '超时', message: 'AI响应超时，已切换离线话术' },
+        { pattern: 'Failed to fetch', message: '网络连接失败，已切换离线话术' },
+      ],
+
+      /**
+       * 根据错误信息匹配友好的错误提示
+       * @param {Error} error - 原始错误对象
+       * @returns {string} 友好的错误提示
+       */
+      getFriendlyMessage(error) {
+        const msg = error.message || '';
+        for (const item of this.errorMap) {
+          if (msg.includes(item.pattern)) {
+            return item.message;
+          }
+        }
+        // 其他错误返回原始信息
+        return msg || '未知错误';
+      },
+
+      /**
+       * 在结果区域显示错误提示
+       * @param {string} message - 友好的错误信息
+       */
+      showError(message) {
+        // 使用 textContent 避免 XSS（P2 修复）
+        $resultText.textContent = '';
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.textContent = message;
+        $resultText.appendChild(errorDiv);
+      }
+    };
+
+    // ================================================================
+    // SuggestModule - 场景征集模块 (A1)
+    // ================================================================
+
+    const SuggestModule = {
+      STORAGE_KEY: 'wp_user_suggestions',
+
+      /** 获取已提交的建议列表 */
+      getSuggestions() {
+        try {
+          return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || [];
+        } catch (e) {
+          return [];
+        }
+      },
+
+      /** 提交建议 */
+      submit() {
+        const text = $suggestInput.value.trim();
+        if (!text) {
+          $suggestInput.focus();
+          return;
+        }
+        if (text.length > 100) {
+          ToastModule.show('建议内容不能超过100字');
+          return;
+        }
+
+        const suggestions = this.getSuggestions();
+        suggestions.push({
+          text: text,
+          time: new Date().toISOString()
+        });
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(suggestions));
+
+        // 清空输入框
+        $suggestInput.value = '';
+
+        // 更新建议数量
+        this.updateCount();
+
+        // 显示提示
+        ToastModule.show('感谢建议！我们会尽快上线 🎉');
+      },
+
+      /** 更新建议数量显示 */
+      updateCount() {
+        const count = this.getSuggestions().length;
+        $suggestCount.textContent = count > 0 ? `（已有${count}条建议）` : '';
+      },
+
+      /** 初始化模块 */
+      init() {
+        $suggestBtn.addEventListener('click', () => this.submit());
+        $suggestInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            this.submit();
+          }
+        });
+        this.updateCount();
+      }
+    };
+
+    // ================================================================
+    // ToastModule - 通用 Toast 提示模块
+    // ================================================================
+
+    const ToastModule = {
+      toastEl: null,
+      toastTimer: null,
+
+      /** 显示 Toast 提示 */
+      show(message, duration = 2500) {
+        // 复用或创建 toast 元素
+        if (!this.toastEl) {
+          this.toastEl = document.createElement('div');
+          this.toastEl.className = 'custom-toast';
+          document.body.appendChild(this.toastEl);
+        }
+
+        if (this.toastTimer) clearTimeout(this.toastTimer);
+
+        this.toastEl.textContent = message;
+        this.toastEl.classList.add('show');
+
+        this.toastTimer = setTimeout(() => {
+          this.toastEl.classList.remove('show');
+        }, duration);
+      }
+    };
+
+    // ================================================================
+    // CancelModule - 取消生成模块 (A2)
+    // ================================================================
+
+    const CancelModule = {
+      /** 用户主动取消生成 */
+      cancel() {
+        if (abortController) {
+          abortController.abort();
+        }
+        $resultText.classList.remove('typing-cursor');
+        AIModule.setGeneratingState(false);
+        isGenerating = false;
+
+        // 显示取消提示（使用 textContent 避免 XSS）
+        if (!currentResult) {
+          $resultText.textContent = '已取消生成';
+          $resultText.classList.add('text-gray-400', 'text-center');
+          setTimeout(() => {
+            $resultText.classList.remove('text-gray-400', 'text-center');
+          }, 2000);
+        }
+      }
+    };
+
+    // ================================================================
     // 应用初始化
     // ================================================================
 
@@ -1062,6 +1828,12 @@
       ToneModule.init();
       AIModule.init();
       CopyModule.init();
+      // P2 互动功能模块
+      StatsModule.init();
+      LikeModule.init();
+      RateLimitModule.init();
+      NetworkModule.init();
+      SuggestModule.init();
 
       // 默认选中第一个场景
       SceneModule.selectScene(SCENES[0]);
