@@ -216,6 +216,19 @@
     </section>
 
     <!-- ============================================================
+         语气选择区
+         ============================================================ -->
+    <section id="toneSection" class="mb-6">
+      <h2 class="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-1.5">
+        <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        选择语气风格
+      </h2>
+      <div id="toneButtons" class="flex flex-wrap gap-2">
+        <!-- 4个语气按钮由JS渲染 -->
+      </div>
+    </section>
+
+    <!-- ============================================================
          话术展示区
          ============================================================ -->
     <section id="resultSection" class="mb-6">
@@ -305,6 +318,66 @@
       { id: 'performance', name: '绩效面谈', icon: '📈', placeholder: '例：领导给我打了低绩效，我觉得不公平，想沟通', examples: ['领导给我打了低绩效，我觉得不公平，想沟通', '年终自评不知道怎么写才能突出自己的贡献', '想和领导沟通明年的绩效目标和期望'] }
     ];
 
+    /** 4种语气数据 */
+    const TONES = [
+      { id: 'gentle', name: '温和', icon: '🌸', desc: '委婉得体，适合对上级', rule: '多用"理解""建议""可以吗""方便的话"等柔性词汇，语气委婉但不失礼貌' },
+      { id: 'firm', name: '坚定', icon: '💪', desc: '有理有据，维护权益', rule: '多用"需要""建议""期望"等明确词汇，有理有据但不冒犯' },
+      { id: 'concise', name: '简洁', icon: '⚡', desc: '直奔主题，高效沟通', rule: '控制在30-80字以内，直奔主题，不铺垫，每句话都有信息量' },
+      { id: 'humor', name: '幽默', icon: '😄', desc: '轻松化解，拉近距离', rule: '可适当加入轻松元素（如自嘲、比喻、网络用语），但保持职场得体，不能过于随意' }
+    ];
+
+    /** 8场景 x 4语气 = 32条预设降级话术 */
+    const FALLBACK_TEXTS = {
+      salary: {
+        gentle: '领导您好，想占用您一点时间聊聊薪酬的事情。过去这段时间我在XX项目中承担了XX工作，也取得了一些成果，同时逐步接手了更多职责。希望能结合目前的贡献和市场情况，看看有没有机会适当调整薪资级别。感谢您的时间！',
+        firm: '领导，我想就薪酬调整和您沟通。过去一年我负责了XX项目，产出了XX成果，承担了超出原岗位的职责。根据市场水平和我的实际贡献，我期望薪资能调整到XX水平，希望您能考虑。',
+        concise: '领导，基于我在XX项目的额外贡献和职责扩展，申请薪资调整，方便时安排时间详谈。',
+        humor: '领导，有个"钱"的问题想和您聊聊😂 我最近在XX项目上又是加班又是扛活，感觉自己的身价也需要一次"版本升级"了，方便的话聊几句？'
+      },
+      resign: {
+        gentle: '领导您好，经过慎重考虑，因个人职业规划的原因，我计划在X月X日正式离职。非常感谢这段时间公司对我的培养和团队的帮助，我会认真完成所有工作交接，确保项目顺利过渡。',
+        firm: '领导，我已决定于X月X日离职，原因是个人职业发展方向调整。我会按照公司流程完成交接，确保所有工作有序过渡。感谢这段时间的合作。',
+        concise: '领导，因个人原因我计划于X月X日离职，会按流程完成交接，感谢这段时间的支持。',
+        humor: '领导，我要去追寻人生的下一篇章了📖 感谢这段时间的照顾，我会把工作交接得明明白白的，绝不给大家留坑！'
+      },
+      refuse: {
+        gentle: '非常理解你这边比较紧急，但我目前手上有优先级更高的任务在赶deadline，实在抽不出整块时间。要不你先看看XX文档，或者我晚点有空帮你看一下关键点？',
+        firm: '这个需求我目前没办法接，手头的项目已经排满了，强行加进来会影响交付质量。建议你和XX沟通一下资源分配，或者调整一下优先级。',
+        concise: '现在排不开，手头项目优先级更高，建议找XX协调资源。',
+        humor: '兄弟，我的排期已经比我的发际线还满了😂 你先看看能不能找别人救个急，实在不行我下周帮你看看？'
+      },
+      report: {
+        gentle: '领导，想跟您同步一下XX项目的进展。目前整体进度完成了XX%，其中XX模块已经上线，效果不错。不过XX部分遇到了一些问题，我已经制定了应对方案，想听听您的建议。',
+        firm: '领导，XX项目目前进度XX%，核心功能已交付。遇到一个问题：XX导致延期XX天，原因是XX。我的解决方案是XX，预计可在X日前恢复进度。需要您协调XX资源支持。',
+        concise: 'XX项目进度XX%，核心已交付。XX问题导致延期，方案已制定，需协调XX资源，预计X日恢复。',
+        humor: '领导汇报一下：好消息是XX模块提前完成了，坏消息是XX模块给我挖了个坑😅 不过别担心，我已经填好了，整体进度XX%，稳得很！'
+      },
+      apologize: {
+        gentle: 'XX，关于今天会议上我说的话，事后想想确实不太妥当，可能让你不太舒服了，这个是我的问题。我的本意是XX，但表达方式不对。非常抱歉，以后我会注意的。',
+        firm: 'XX，就今天会议上的事情，我需要道个歉。我当时的表达方式确实有问题，给你造成了困扰。不过关于XX这个事情本身，我的观点是XX，希望我们能找个时间单独沟通一下。',
+        concise: 'XX，今天会议上我的表达方式不妥，向你道歉。后续关于XX的事情我们再单独沟通。',
+        humor: 'XX，我今天的嘴好像不太听使唤😅 说了一些不太合适的话，给你道个歉！下次我争取先过脑子再张嘴，感谢包容！'
+      },
+      hr: {
+        gentle: '非常感谢您推荐这个机会，经过认真考虑，目前我暂时不考虑新的工作机会。如果后续有变化，我会第一时间联系您。再次感谢您的关注！',
+        firm: '感谢推荐，但这个岗位的方向和我的职业规划不太匹配。我目前的发展重心在XX方向，薪资期望在XX范围。如果有更合适的岗位，欢迎继续推荐。',
+        concise: '感谢推荐，目前暂不考虑新机会。如有XX方向岗位可再联系。',
+        humor: '感谢惦记！不过我目前和现公司还处于"热恋期"😂 暂不考虑"分手"，有好的机会先帮我记着，说不定哪天就来找你了！'
+      },
+      cross: {
+        gentle: 'XX你好，我们这边XX项目需要在X日前拿到你们XX模块的交付物，想确认一下目前的进度。如果有什么困难或者需要我们配合的地方，随时沟通，我们一起想办法推进。',
+        firm: 'XX，XX项目需要在X日前完成XX模块的交付，目前进度有滞后风险。这个项目是XX领导安排的优先级，需要你们在X日前完成。如果资源有困难，请尽快反馈，我来协调。',
+        concise: 'XX，XX项目需在X日前交付XX模块，请确认进度。如有风险请及时反馈。',
+        humor: 'XX大佬，救命！我们XX项目等着你们的XX模块续命呢😂 方便透露一下进度吗？有啥困难我们一起扛，别让我一个人在风中凌乱~'
+      },
+      performance: {
+        gentle: '领导，关于这次绩效评估，我想了解一下具体的评分依据。过去一年我在XX方面做了XX工作，自认为达成了XX目标。如果有哪些方面做得不够好，希望您能具体指导，我也好针对性地改进。',
+        firm: '领导，关于这次绩效结果，我有一些想法想和您沟通。过去一年我的XX项目产出了XX成果，XX指标超额完成XX%。目前的绩效评级和我的实际贡献似乎不太匹配，希望您能重新评估。',
+        concise: '领导，请说明本次绩效评分的具体依据。我过去一年的XX成果和XX指标完成情况，希望能纳入评估考量。',
+        humor: '领导，看到绩效结果的时候，我的心情就像代码跑出了一个意想不到的bug😅 能聊聊具体是怎么评的吗？我觉得自己的产出配得上更好的"版本号"！'
+      }
+    };
+
     /** 每日金句数据（30条） */
     const DAILY_QUOTES = [
       '职场最大的能力，不是会做事，而是会说话。',
@@ -354,6 +427,7 @@
     let currentScene = null;       // 当前选中的场景对象
     let isGenerating = false;      // 是否正在生成中
     let currentResult = '';        // 当前生成的话术结果
+    let currentTone = TONES[0];    // 当前选中的语气，默认温和
     let abortController = null;    // 用于取消请求的 AbortController
     let loadingTimer = null;       // loading 省略号动画定时器
 
@@ -578,18 +652,19 @@
        * 流式调用 AI 接口
        * @param {string} sceneName - 场景名称
        * @param {string} userInput - 用户输入的情境
+       * @param {string} toneRule - 语气规则描述
        * @param {function} onChunk - 每收到一段文本的回调
        * @param {function} onDone - 完成回调
        * @param {function} onError - 错误回调
        */
-      async streamGenerate(sceneName, userInput, onChunk, onDone, onError) {
+      async streamGenerate(sceneName, userInput, toneRule, onChunk, onDone, onError) {
         abortController = new AbortController();
 
         const body = {
           model: API_CONFIG.model,
           messages: [
             { role: 'system', content: this.getSystemPrompt() },
-            { role: 'user', content: this.getUserPrompt(sceneName, userInput) },
+            { role: 'user', content: this.getUserPrompt(sceneName, userInput, toneRule) },
           ],
           stream: true,
           temperature: 0.8,
@@ -696,16 +771,18 @@
         // 显示结果区域
         $emptyState.classList.add('hidden');
         $resultContent.classList.remove('hidden');
-        $resultSceneTag.textContent = currentScene.icon + ' ' + currentScene.name;
+        $resultSceneTag.textContent = currentScene.icon + ' ' + currentScene.name + ' \u00B7 ' + currentTone.name;
         $resultText.textContent = '';
         $resultText.classList.add('typing-cursor');
         $resultWordCount.textContent = '';
 
         const sceneName = currentScene.name;
+        const toneRule = currentTone.rule;
 
         await this.streamGenerate(
           sceneName,
           userInput,
+          toneRule,
           // onChunk: 每收到一段文本
           (chunk) => {
             currentResult += chunk;
@@ -734,9 +811,9 @@
               // 已有部分内容，保留并允许复制
               $copyBtn.disabled = false;
             } else {
-              $resultText.textContent = `生成失败：${error.message}\n\n请检查网络连接后重试。`;
-              $resultText.classList.add('text-red-500');
-              setTimeout(() => $resultText.classList.remove('text-red-500'), 3000);
+              // 完全失败，尝试降级到预设话术
+              const sceneId = currentScene ? currentScene.id : null;
+              FallbackModule.fallback(sceneId, currentTone.id);
             }
           }
         );
@@ -851,6 +928,130 @@
     };
 
     // ================================================================
+    // ToneModule - 语气切换模块
+    // ================================================================
+
+    const ToneModule = {
+      /** 渲染语气按钮 */
+      renderToneButtons() {
+        const $toneButtons = document.getElementById('toneButtons');
+        $toneButtons.innerHTML = '';
+        TONES.forEach(tone => {
+          const btn = document.createElement('button');
+          btn.className = 'text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-500 bg-white cursor-pointer transition-all';
+          btn.dataset.toneId = tone.id;
+          btn.title = tone.desc;
+          btn.textContent = tone.icon + ' ' + tone.name;
+          // 默认选中第一个（温和）
+          if (tone.id === currentTone.id) {
+            btn.classList.remove('border-gray-200', 'text-gray-500', 'bg-white');
+            btn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600');
+          }
+          btn.addEventListener('click', () => this.selectTone(tone));
+          $toneButtons.appendChild(btn);
+        });
+      },
+
+      /** 选中某个语气 */
+      selectTone(tone) {
+        if (isGenerating) return; // 生成中不允许切换
+        currentTone = tone;
+
+        // 更新按钮高亮
+        document.querySelectorAll('#toneButtons button').forEach(btn => {
+          if (btn.dataset.toneId === tone.id) {
+            btn.classList.remove('border-gray-200', 'text-gray-500', 'bg-white');
+            btn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600');
+          } else {
+            btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600');
+            btn.classList.add('border-gray-200', 'text-gray-500', 'bg-white');
+          }
+        });
+
+        // 如果已有生成内容，自动重新生成
+        if (currentResult && !isGenerating) {
+          AIModule.generate();
+        }
+      },
+
+      /** 初始化模块 */
+      init() {
+        this.renderToneButtons();
+      }
+    };
+
+    // ================================================================
+    // FallbackModule - 预设话术降级模块
+    // ================================================================
+
+    const FallbackModule = {
+      /**
+       * 获取预设降级话术
+       * @param {string} sceneId - 场景ID
+       * @param {string} toneId - 语气ID
+       * @returns {string|null} 预设话术，找不到则返回null
+       */
+      getFallbackText(sceneId, toneId) {
+        // 自定义场景无法匹配预设话术
+        if (!sceneId || sceneId.startsWith('custom_')) return null;
+        const sceneTexts = FALLBACK_TEXTS[sceneId];
+        if (!sceneTexts) return null;
+        return sceneTexts[toneId] || null;
+      },
+
+      /**
+       * 使用模拟打字机效果展示预设话术
+       * @param {string} text - 要展示的文本
+       * @param {function} onComplete - 完成回调
+       */
+      typewriterShow(text, onComplete) {
+        currentResult = '';
+        $resultText.textContent = '';
+        $resultText.classList.add('typing-cursor');
+
+        let index = 0;
+        const timer = setInterval(() => {
+          if (index < text.length) {
+            currentResult += text[index];
+            $resultText.textContent = currentResult;
+            $resultWordCount.textContent = `${currentResult.length} 字`;
+            index++;
+          } else {
+            clearInterval(timer);
+            $resultText.classList.remove('typing-cursor');
+            $copyBtn.disabled = false;
+            $regenerateBtn.disabled = false;
+            if (onComplete) onComplete();
+          }
+        }, 20); // 每字20ms
+      },
+
+      /**
+       * 执行降级逻辑：展示预设话术
+       * @param {string} sceneId - 场景ID
+       * @param {string} toneId - 语气ID
+       */
+      fallback(sceneId, toneId) {
+        const text = this.getFallbackText(sceneId, toneId);
+        if (!text) {
+          // 无法降级，显示错误提示
+          $resultText.textContent = '生成失败，且无可用离线话术，请检查网络后重试。';
+          $resultText.classList.add('text-red-500');
+          setTimeout(() => $resultText.classList.remove('text-red-500'), 3000);
+          return;
+        }
+
+        // 更新标签为"离线话术"标记
+        if (currentScene) {
+          $resultSceneTag.textContent = currentScene.icon + ' ' + currentScene.name + ' \u00B7 ' + currentTone.name + ' \u{1F4CB} 离线话术';
+        }
+
+        // 使用打字机效果展示
+        this.typewriterShow(text);
+      }
+    };
+
+    // ================================================================
     // 应用初始化
     // ================================================================
 
@@ -858,6 +1059,7 @@
       QuoteModule.init();
       SceneModule.init();
       InputModule.init();
+      ToneModule.init();
       AIModule.init();
       CopyModule.init();
 
