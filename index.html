@@ -902,18 +902,41 @@
       },
 
       /**
-       * 过滤 MiniMax 模型返回的 <think沉思> 思考标签
+       * 过滤 MiniMax 模型返回的思考标签
        * MiniMax-M2.7 可能返回思考过程，需要实时过滤掉
+       * 
+       * 已知格式（实测确认）：
+       * 1. <think沉思>...</think沉思>（XML标签版）
+       * 2. 💭用户要求生成...\n\n思考过程...\n💭\n正式内容（emoji版，💭=U+1F4AD）
+       * 3. 💭用户要求生成（流式中只有开始标记，超时中断）
+       * 
+       * 核心策略：找到最后一个 💭\n 作为思考过程结束标记，
+       * 删除它之前的所有内容（包含思考过程和开始标记）。
+       * 
        * @param {string} text - 包含可能的 think 标签的文本
        * @returns {string} 过滤后的纯话术文本
        */
       _filterThinkTags(text) {
-        // 过滤已闭合的 <think沉思>...</think沉思> 块
+        // 1. 过滤 XML 标签版
         text = text.replace(/<think沉思>[\s\S]*?<\/think沉思>/g, '');
-        // 过滤未闭合的 <think沉思>... 块（流式传输中可能尚未闭合）
         text = text.replace(/<think沉思>[\s\S]*/g, '');
-        // 过滤 emoji 版本的思考标签（💭用户 等）
-        text = text.replace(/💭用户[\s\S]*/g, '');
+
+        // 2. 过滤 emoji 版思考块
+        //    策略：找到最后一个 💭\n（思考过程结束标记），删除之前的所有内容
+        const THINK_END = '\u{1F4AD}\n'; // 💭\n
+        const lastThinkEnd = text.lastIndexOf(THINK_END);
+        if (lastThinkEnd > 0) {
+          // > 0 表示不是在开头（开头说明只有开始标记没有结束标记）
+          text = text.substring(lastThinkEnd + THINK_END.length);
+        }
+
+        // 3. 如果仍以 💭 开头（流式中只有开始标记，超时中断）
+        if (text.startsWith('\u{1F4AD}')) {
+          text = '';
+        }
+
+        // 4. 清理开头残留的换行和空行
+        text = text.replace(/^\s*\n+/, '');
         return text;
       },
 
