@@ -1664,7 +1664,7 @@
 
     const RateLimitModule = {
       STORAGE_KEY: 'wp_daily_count',
-      DAILY_LIMIT: 20,
+      DAILY_LIMIT: 100,
       _lastRequestTime: 0, // 强化限流：1秒防抖，记录上次请求时间戳
 
       /** 检查是否在1秒内重复请求（强化限流） */
