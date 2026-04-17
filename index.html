@@ -529,6 +529,30 @@
       </div>
     </section>
 
+    <!-- 建议提交模态框 -->
+    <div id="suggestModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 transform transition-all">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold text-gray-800">💡 提交场景建议</h3>
+          <button id="suggestModalClose" class="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none" aria-label="关闭">&times;</button>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm text-gray-600 mb-1">建议内容 <span class="text-red-400">*</span></label>
+            <textarea id="suggestTextarea" rows="3" maxlength="200" placeholder="你希望增加什么职场沟通场景？如：和甲方催款、面试自我介绍..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"></textarea>
+            <p class="text-xs text-gray-400 mt-1 text-right"><span id="suggestCharCount">0</span>/200</p>
+          </div>
+          <div>
+            <label class="block text-sm text-gray-600 mb-1">联系方式 <span class="text-gray-400">(可选)</span></label>
+            <input id="suggestContact" type="text" maxlength="50" placeholder="微信号/邮箱，方便我们联系你" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+          </div>
+          <button id="suggestSubmitBtn" class="w-full py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm">
+            提交建议
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ============================================================
          底部标识
          ============================================================ -->
@@ -716,6 +740,12 @@
     const $suggestInput = document.getElementById('suggestInput');
     const $suggestBtn = document.getElementById('suggestBtn');
     const $suggestCount = document.getElementById('suggestCount');
+    const $suggestModal = document.getElementById('suggestModal');
+    const $suggestModalClose = document.getElementById('suggestModalClose');
+    const $suggestTextarea = document.getElementById('suggestTextarea');
+    const $suggestContact = document.getElementById('suggestContact');
+    const $suggestCharCount = document.getElementById('suggestCharCount');
+    const $suggestSubmitBtn = document.getElementById('suggestSubmitBtn');
 
     // ================================================================
     // QuoteModule - 每日金句模块
@@ -1934,12 +1964,16 @@
 
     // ================================================================
     // SuggestModule - 场景征集模块 (A1)
+    // 使用 FormSubmit.co 免费服务，建议直接发送到你的邮箱
+    // 首次使用：访问 https://formsubmit.co/你的邮箱 激活即可
     // ================================================================
 
     const SuggestModule = {
       STORAGE_KEY: 'wp_user_suggestions',
+      // ⚠️ 替换为你的邮箱，首次提交后 FormSubmit 会发验证邮件
+      FORMSUBMIT_EMAIL: 'YOUR_EMAIL@example.com',
 
-      /** 获取已提交的建议列表 */
+      /** 获取已提交的建议列表（本地缓存） */
       getSuggestions() {
         try {
           return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || [];
@@ -1948,33 +1982,81 @@
         }
       },
 
-      /** 提交建议 */
-      submit() {
-        const text = $suggestInput.value.trim();
+      /** 打开模态框 */
+      openModal() {
+        $suggestModal.classList.remove('hidden');
+        $suggestModal.classList.add('flex');
+        $suggestTextarea.value = '';
+        $suggestContact.value = '';
+        $suggestCharCount.textContent = '0';
+        $suggestTextarea.focus();
+      },
+
+      /** 关闭模态框 */
+      closeModal() {
+        $suggestModal.classList.add('hidden');
+        $suggestModal.classList.remove('flex');
+      },
+
+      /** 提交建议到 FormSubmit.co + 本地缓存 */
+      async submit() {
+        const text = $suggestTextarea.value.trim();
         if (!text) {
-          $suggestInput.focus();
+          ToastModule.show('请输入建议内容');
+          $suggestTextarea.focus();
           return;
         }
-        if (text.length > 100) {
-          ToastModule.show('建议内容不能超过100字');
+        if (text.length > 200) {
+          ToastModule.show('建议内容不能超过200字');
           return;
         }
 
-        const suggestions = this.getSuggestions();
-        suggestions.push({
-          text: text,
-          time: new Date().toISOString()
-        });
-        try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(suggestions)); } catch(e) { /* 静默降级 */ }
+        const contact = $suggestContact.value.trim();
+        const scene = currentScene ? currentScene.name : '未选择';
 
-        // 清空输入框
-        $suggestInput.value = '';
+        // 禁用按钮防止重复提交
+        $suggestSubmitBtn.disabled = true;
+        $suggestSubmitBtn.textContent = '提交中...';
 
-        // 更新建议数量
-        this.updateCount();
+        try {
+          // 发送到 FormSubmit.co（免费、无需注册、直接发到邮箱）
+          const response = await fetch(`https://formsubmit.co/ajax/${this.FORMSUBMIT_EMAIL}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({
+              _subject: '🎯 AI职场嘴替 - 新场景建议',
+              建议内容: text,
+              联系方式: contact || '未提供',
+              当前场景: scene,
+              提交时间: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+            }),
+          });
 
-        // 显示提示
-        ToastModule.show('感谢建议！我们会尽快上线 🎉');
+          if (response.ok) {
+            // 同时保存到本地
+            const suggestions = this.getSuggestions();
+            suggestions.push({ text, contact, scene, time: new Date().toISOString() });
+            try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(suggestions)); } catch(e) {}
+
+            this.closeModal();
+            this.updateCount();
+            ToastModule.show('提交成功！感谢你的建议 🎉');
+          } else {
+            ToastModule.show('网络异常，请稍后再试');
+          }
+        } catch (e) {
+          // 网络失败时仍然保存到本地
+          const suggestions = this.getSuggestions();
+          suggestions.push({ text, contact, scene, time: new Date().toISOString() });
+          try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(suggestions)); } catch(e) {}
+
+          this.closeModal();
+          this.updateCount();
+          ToastModule.show('已保存到本地，联网后将自动同步');
+        } finally {
+          $suggestSubmitBtn.disabled = false;
+          $suggestSubmitBtn.textContent = '提交建议';
+        }
       },
 
       /** 更新建议数量显示 */
@@ -1985,12 +2067,29 @@
 
       /** 初始化模块 */
       init() {
-        $suggestBtn.addEventListener('click', () => this.submit());
+        // 原有提交按钮 → 打开模态框
+        $suggestBtn.addEventListener('click', () => this.openModal());
         $suggestInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            this.submit();
+          if (e.key === 'Enter') this.openModal();
+        });
+
+        // 模态框事件
+        $suggestModalClose.addEventListener('click', () => this.closeModal());
+        $suggestModal.addEventListener('click', (e) => {
+          if (e.target === $suggestModal) this.closeModal();
+        });
+        $suggestSubmitBtn.addEventListener('click', () => this.submit());
+        $suggestTextarea.addEventListener('input', () => {
+          $suggestCharCount.textContent = $suggestTextarea.value.length;
+        });
+
+        // ESC 关闭模态框
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && !$suggestModal.classList.contains('hidden')) {
+            this.closeModal();
           }
         });
+
         this.updateCount();
       }
     };
