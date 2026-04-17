@@ -909,34 +909,32 @@
       },
 
       /**
-       * 过滤 MiniMax 模型返回的思考标签
-       * MiniMax-M2.7 可能返回思考过程，需要实时过滤掉
+       * 过滤 MiniMax 模型返回的思考标签（彻底方案 v3）
        * 
-       * 已知格式（实测确认）：
-       * 1. <think沉思>...</think沉思>（XML标签版）
-       * 2. 💭用户要求生成...\n\n思考过程...\n💭\n正式内容（emoji版，💭=U+1F4AD）
-       * 3. 💭用户要求生成（流式中只有开始标记，超时中断）
+       * 已知格式（全部实测确认）：
+       * 1. <think沉思>...</think沉思>（中文XML标签版）
+       * 2. <think沉思>...（未闭合，流式中）
+       * 3. <think...>...</think >（英文XML标签版，截图确认）
+       * 4. <think...>...（未闭合英文版）
+       * 5. 💭...💭/💤/💡（emoji版，各种结束标记）
+       * 6. 💭...（只有开头，流式中断）
        * 
-       * 核心策略（彻底方案 v2）：
-       * 1. XML标签版：正则删除
-       * 2. emoji版：找到💭开头的思考块
-       *    - 在开头：找到结束emoji标记行（💭/💤/💡等纯emoji行），删除到该行之后
-       *    - 在中间：截断从💭到末尾
-       *    - 不再猜测具体哪个emoji是结束标记，任何纯emoji行都视为标记
+       * 策略：先删除所有XML标签版，再处理emoji版
        * 
        * @param {string} text - 包含可能的 think 标签的文本
        * @returns {string} 过滤后的纯话术文本
        */
       _filterThinkTags(text) {
-        // 1. 过滤 XML 标签版
-        text = text.replace(/<think沉思>[\s\S]*?<\/think沉思>/g, '');
-        text = text.replace(/<think沉思>[\s\S]*/g, '');
+        // ===== 第一步：删除所有 <think...>...</think...> XML标签块 =====
+        // 匹配 <think...> 到 </think...> 之间的所有内容（>可选，支持<think\n格式）
+        text = text.replace(/<think[^>]*>?[\s\S]*?<\/think[^>]*>?/gi, '');
+        // 匹配未闭合的 <think...>...（流式中可能尚未闭合）
+        text = text.replace(/<think[^>]*>?[\s\S]*/gi, '');
 
-        // 2. 过滤 emoji 版思考块
-        const THINK = '\u{1F4AD}'; // 💭 U+1F4AD
+        // ===== 第二步：处理 emoji 版思考块（💭 U+1F4AD） =====
+        const THINK = '\u{1F4AD}';
 
         if (!text.includes(THINK)) {
-          // 无思考标签，直接返回
           return text;
         }
 
@@ -962,7 +960,6 @@
           }
 
           if (endLineIdx !== -1) {
-            // 找到结束标记，保留它之后的内容
             text = lines.slice(endLineIdx + 1).join('\n');
           } else {
             // 没有找到结束标记（流式中），清空
@@ -970,7 +967,24 @@
           }
         }
 
-        // 3. 清理开头残留的换行和空行
+        // ===== 第三步：检测 prompt 复述 / 非话术内容 =====
+        // MiniMax M2.7 在 enable_thinking:false 时可能直接把 prompt 复述作为输出
+        // 这种情况下整个输出都是垃圾数据，应全部清空走降级
+        // 检测特征：以"一段XX的话术"、"请生成"、"当前场景"、"我需要写"等开头
+        const junkPatterns = [
+          /^一段[\s\S]{0,30}话术/,
+          /^请生成[\s\S]{0,30}话术/,
+          /^当前场景[：:]/,
+          /^用户情境[：:]/,
+          /^我需要写/,
+          /^我需要生成/,
+        ];
+        const isJunk = junkPatterns.some(p => p.test(text));
+        if (isJunk) {
+          text = '';
+        }
+
+        // ===== 第四步：清理残留 =====
         text = text.replace(/^\s*\n+/, '');
         return text;
       },
@@ -1005,6 +1019,9 @@
           stream: true,
           temperature: 0.8,
           max_tokens: 512,
+          // 彻底禁用模型思考过程（MiniMax M2.7 支持）
+          // 不设置 enable_thinking 或设为 false 可禁用 <think沉思> 和 💭 思考输出
+          enable_thinking: false,
         };
 
         // 5秒超时自动降级
@@ -1052,10 +1069,12 @@
 
               try {
                 const json = JSON.parse(trimmed.slice(6));
+                // 只取正式内容，忽略 reasoning_content（思考过程）
                 const delta = json.choices?.[0]?.delta?.content;
                 if (delta) {
                   onChunk(delta);
                 }
+                // 注意：json.choices[0].delta.reasoning_content 是思考过程，故意不处理
               } catch (e) {
                 // JSON 解析失败，跳过这一行
                 continue;
