@@ -917,8 +917,12 @@
        * 2. 💭用户要求生成...\n\n思考过程...\n💭\n正式内容（emoji版，💭=U+1F4AD）
        * 3. 💭用户要求生成（流式中只有开始标记，超时中断）
        * 
-       * 核心策略：找到最后一个 💭\n 作为思考过程结束标记，
-       * 删除它之前的所有内容（包含思考过程和开始标记）。
+       * 核心策略（彻底方案 v2）：
+       * 1. XML标签版：正则删除
+       * 2. emoji版：找到💭开头的思考块
+       *    - 在开头：找到结束emoji标记行（💭/💤/💡等纯emoji行），删除到该行之后
+       *    - 在中间：截断从💭到末尾
+       *    - 不再猜测具体哪个emoji是结束标记，任何纯emoji行都视为标记
        * 
        * @param {string} text - 包含可能的 think 标签的文本
        * @returns {string} 过滤后的纯话术文本
@@ -929,26 +933,44 @@
         text = text.replace(/<think沉思>[\s\S]*/g, '');
 
         // 2. 过滤 emoji 版思考块
-        //    策略：找到最后一个 💭\n（思考过程结束标记），删除之前的所有内容
-        const THINK_END = '\u{1F4AD}\n'; // 💭\n
-        const lastThinkEnd = text.lastIndexOf(THINK_END);
-        if (lastThinkEnd > 0) {
-          // > 0 表示不是在开头（开头说明只有开始标记没有结束标记）
-          text = text.substring(lastThinkEnd + THINK_END.length);
+        const THINK = '\u{1F4AD}'; // 💭 U+1F4AD
+
+        if (!text.includes(THINK)) {
+          // 无思考标签，直接返回
+          return text;
         }
 
-        // 3. 如果仍以 💭 开头（流式中只有开始标记，超时中断）
-        if (text.startsWith('\u{1F4AD}')) {
-          text = '';
+        const thinkStart = text.indexOf(THINK);
+
+        if (thinkStart > 0) {
+          // 💭在中间：截断从💭到末尾
+          text = text.substring(0, thinkStart);
+        } else {
+          // 💭在开头：找到结束emoji标记行，删除从开头到该行
+          const lines = text.split('\n');
+          let endLineIdx = -1;
+
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line === '') continue;
+            // 检查是否是纯emoji标记行（1-3个emoji字符，无其他文字）
+            const isEmojiMarker = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]{1,3}$/.test(line);
+            if (isEmojiMarker) {
+              endLineIdx = i;
+              break;
+            }
+          }
+
+          if (endLineIdx !== -1) {
+            // 找到结束标记，保留它之后的内容
+            text = lines.slice(endLineIdx + 1).join('\n');
+          } else {
+            // 没有找到结束标记（流式中），清空
+            text = '';
+          }
         }
 
-        // BUG#7修复：如果文本中间包含 💭 但没有对应的结束标记，截断从💭到末尾的内容
-        const midThink = text.indexOf('\u{1F4AD}');
-        if (midThink !== -1) {
-          text = text.substring(0, midThink);
-        }
-
-        // 4. 清理开头残留的换行和空行
+        // 3. 清理开头残留的换行和空行
         text = text.replace(/^\s*\n+/, '');
         return text;
       },
