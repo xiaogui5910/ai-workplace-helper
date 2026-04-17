@@ -673,6 +673,7 @@
     let currentTone = TONES[0];    // 当前选中的语气，默认温和
     let abortController = null;    // 用于取消请求的 AbortController
     let requestId = 0;             // 请求标识符，防止旧回调覆盖新状态（BUG#2修复）
+    let _junkDetected = false;     // 垃圾内容检测标志（prompt复述/思考计划）
     let loadingTimer = null;       // loading 省略号动画定时器
 
     // ================================================================
@@ -909,27 +910,40 @@
       },
 
       /**
-       * 过滤 MiniMax 模型返回的思考标签（彻底方案 v3）
+       * 过滤 MiniMax 模型返回的思考标签（彻底方案 v5）
        * 
        * 已知格式（全部实测确认）：
        * 1. <think沉思>...</think沉思>（中文XML标签版）
        * 2. <think沉思>...（未闭合，流式中）
-       * 3. <think...>...</think >（英文XML标签版，截图确认）
-       * 4. <think...>...（未闭合英文版）
-       * 5. 💭...💭/💤/💡（emoji版，各种结束标记）
-       * 6. 💭...（只有开头，流式中断）
+       * 3. <think>...</think>（英文XML标签版，截图确认）
+       * 4. <think>...（未闭合英文版）
+       * 5. <think...>...</think >（其他变体）
+       * 6. 💭...💭/💤/💡（emoji版，各种结束标记）
+       * 7. 💭...（只有开头，流式中断）
        * 
-       * 策略：先删除所有XML标签版，再处理emoji版
+       * 策略：循环过滤直到没有think标签为止，再处理emoji版
        * 
        * @param {string} text - 包含可能的 think 标签的文本
        * @returns {string} 过滤后的纯话术文本
        */
       _filterThinkTags(text) {
-        // ===== 第一步：删除所有 <think...>...</think...> XML标签块 =====
-        // 匹配 <think...> 到 </think...> 之间的所有内容（>可选，支持<think\n格式）
-        text = text.replace(/<think[^>]*>?[\s\S]*?<\/think[^>]*>?/gi, '');
-        // 匹配未闭合的 <think...>...（流式中可能尚未闭合）
-        text = text.replace(/<think[^>]*>?[\s\S]*/gi, '');
+        let originalText;
+        let maxIterations = 10;
+        
+        // ===== 第一步：循环删除所有 <think...>...</think...> XML标签块 =====
+        // 循环处理，确保嵌套或多个标签都被删除
+        do {
+          originalText = text;
+          
+          // 匹配 <think...> 到 </think...> 之间的所有内容（贪婪匹配）
+          // 修复：确保所有变体都匹配，包括 <think>, <think沉思>, <think_xxx> 等
+          text = text.replace(/<think[^>]*>[\s\S]*?<\/think\s*>/gi, '');
+          
+          // 匹配未闭合的 <think...>...（流式中可能尚未闭合）
+          text = text.replace(/<think[^>]*>[\s\S]*/gi, '');
+          
+          maxIterations--;
+        } while (text !== originalText && maxIterations > 0);
 
         // ===== 第二步：处理 emoji 版思考块（💭 U+1F4AD） =====
         const THINK = '\u{1F4AD}';
@@ -1129,6 +1143,8 @@
         // BUG#4/#16修复：保存场景快照，回调中使用快照而非全局变量
         const sceneSnapshot = currentScene;
         const toneSnapshot = currentTone;
+        // 重置垃圾检测标志
+        _junkDetected = false;
 
         const userInput = $situationInput.value.trim();
         if (!userInput) {
@@ -1205,10 +1221,32 @@
           (chunk) => {
             // BUG#27修复：检查requestId，防止旧请求的chunk写入新请求的结果
             if (currentRequestId !== requestId) return;
-            // 阶段7紧急修复：过滤 MiniMax 模型的 <think沉思> 思考标签
-            // MiniMax-M2.7 可能返回 <think沉思>...</think沉思> 思考过程，需要过滤掉
-            currentResult += chunk;
-            currentResult = this._filterThinkTags(currentResult);
+
+            // 垃圾内容检测：一旦检测到垃圾，丢弃后续chunk直到正式内容出现
+            if (_junkDetected) {
+              // 检查当前chunk是否包含正式话术的开始标志
+              // 正式话术特征：以称呼/礼貌用语开头（领导、您好、感谢等）
+              const formalStart = /^(领导|您好|感谢|你好|老师|老板|XX|尊敬的|亲爱的)/;
+              if (formalStart.test(chunk)) {
+                // 检测到正式内容，重置标志并开始累积
+                _junkDetected = false;
+                currentResult = chunk;
+              } else {
+                // 仍然是垃圾内容，丢弃
+                return;
+              }
+            } else {
+              currentResult += chunk;
+            }
+
+            // 过滤思考标签
+            const filtered = this._filterThinkTags(currentResult);
+            if (filtered !== currentResult) {
+              // 过滤后内容变少，说明检测到垃圾，设置标志
+              _junkDetected = true;
+              currentResult = filtered;
+            }
+
             $resultText.textContent = currentResult;
             // 更新字数
             $resultWordCount.textContent = `${currentResult.length} 字`;
@@ -1217,6 +1255,13 @@
           () => {
             // BUG#2修复：检查请求ID，忽略过期回调
             if (currentRequestId !== requestId) return;
+            
+            // ===== 最终过滤：确保万无一失 =====
+            // 即使在流式输出中已经过滤过，这里再做一次最终过滤
+            currentResult = this._filterThinkTags(currentResult);
+            $resultText.textContent = currentResult;
+            $resultWordCount.textContent = `${currentResult.length} 字`;
+            
             $resultText.classList.remove('typing-cursor');
             this.setGeneratingState(false);
             isGenerating = false;
