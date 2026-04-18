@@ -1538,8 +1538,17 @@
        * @returns {string|null} 预设话术，找不到则返回null
        */
       getFallbackText(sceneId, toneId) {
-        // 自定义场景无法匹配预设话术
-        if (!sceneId || sceneId.startsWith('custom_')) return null;
+        // 自定义场景：根据语气生成通用降级话术
+        if (!sceneId || sceneId.startsWith('custom_')) {
+          const sceneName = currentScene ? currentScene.name : '这个场景';
+          const toneTexts = {
+            gentle: `关于${sceneName}，我想和您坦诚地沟通一下。我理解您的想法，也希望能找到一个双方都满意的方案。方便的话，我们可以找个时间详细聊聊？`,
+            firm: `关于${sceneName}，我需要明确表达我的想法。经过认真考虑，我认为这样做对双方都更有利。希望您能理解我的立场。`,
+            concise: `关于${sceneName}，我想简单说几点：第一，我的诉求是XX；第二，希望能在XX时间内得到回复；第三，期待我们能达成一致。`,
+            humorous: `关于${sceneName}，说真的，这个问题困扰我挺久了。不过我相信以我们的默契，一定能找到好办法。要不我们先喝杯咖啡慢慢聊？`,
+          };
+          return toneTexts[toneId] || toneTexts.gentle;
+        }
         const sceneTexts = FALLBACK_TEXTS[sceneId];
         if (!sceneTexts) return null;
         return sceneTexts[toneId] || null;
