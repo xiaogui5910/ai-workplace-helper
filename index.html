@@ -1986,10 +1986,16 @@
       openModal() {
         $suggestModal.classList.remove('hidden');
         $suggestModal.classList.add('flex');
-        $suggestTextarea.value = '';
+        // 将页面输入框的内容带入模态框
+        const existingText = $suggestInput.value.trim();
+        $suggestTextarea.value = existingText;
+        $suggestCharCount.textContent = existingText.length;
         $suggestContact.value = '';
-        $suggestCharCount.textContent = '0';
-        $suggestTextarea.focus();
+        if (existingText) {
+          $suggestContact.focus();
+        } else {
+          $suggestTextarea.focus();
+        }
       },
 
       /** 关闭模态框 */
