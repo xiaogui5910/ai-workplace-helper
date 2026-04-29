@@ -1854,8 +1854,8 @@
 
     const SuggestModule = {
       STORAGE_KEY: 'wp_user_suggestions',
-      // ⚠️ 替换为你的邮箱，首次提交后 FormSubmit 会发验证邮件
-      FORMSUBMIT_EMAIL: '826345019@qq.com',
+      // FormSubmit token（已激活，替代真实邮箱，防爬虫抓取）
+        FORMSUBMIT_EMAIL: '874ddc2eebee6a71c3cdaccecf596600',
 
       /** 获取已提交的建议列表（本地缓存） */
       getSuggestions() {
