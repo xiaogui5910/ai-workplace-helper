@@ -990,8 +990,8 @@
             }
             // 否则返回原文，等待后续chunk带来结束标记
           } else {
-            // 💭在中间：截断从💭到末尾
-            text = text.substring(0, thinkStart);
+            // 💭在中间：保留💭之后的内容（正式话术），删除💭之前的内容（prompt复述）
+            text = text.substring(thinkStart + THINK.length);
           }
         }
 
@@ -1006,6 +1006,10 @@
           /^用户情境[：:]/,
           /^我需要写/,
           /^我需要生成/,
+          /^用户需要/,
+          /^场景是[：:]/,
+          /^核心要点/,
+          /^直奔主题/,
         ];
         const isJunk = junkPatterns.some(p => p.test(text));
         if (isJunk) {
