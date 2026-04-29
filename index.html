@@ -957,38 +957,41 @@
         } while (text !== originalText && maxIterations > 0);
 
         // ===== 第二步：处理 emoji 版思考块（💭 U+1F4AD） =====
+        // MiniMax M2.7 实际返回格式：
+        //   💭英文思考内容...\n💭\n\n正式话术内容
+        // 第一个💭是开始，第二个💭是结束标记
         const THINK = '\u{1F4AD}';
 
         if (!text.includes(THINK)) {
           return text;
         }
 
-        const thinkStart = text.indexOf(THINK);
+        // 找所有💭的位置
+        const thinkPositions = [];
+        let pos = 0;
+        while ((pos = text.indexOf(THINK, pos)) !== -1) {
+          thinkPositions.push(pos);
+          pos += THINK.length;
+        }
 
-        if (thinkStart > 0) {
-          // 💭在中间：截断从💭到末尾
-          text = text.substring(0, thinkStart);
-        } else {
-          // 💭在开头：找到结束emoji标记行，删除从开头到该行
-          const lines = text.split('\n');
-          let endLineIdx = -1;
-
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line === '') continue;
-            // 检查是否是纯emoji标记行（1-3个emoji字符，无其他文字）
-            const isEmojiMarker = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]{1,3}$/u.test(line);
-            if (isEmojiMarker) {
-              endLineIdx = i;
-              break;
+        if (thinkPositions.length >= 2) {
+          // 有2个及以上💭：删除从第一个💭到第二个💭（含）之间的所有内容
+          const first = thinkPositions[0];
+          const second = thinkPositions[1];
+          text = text.substring(0, first) + text.substring(second + THINK.length);
+        } else if (thinkPositions.length === 1) {
+          const thinkStart = thinkPositions[0];
+          if (thinkStart === 0) {
+            // 💭在开头但只有一个（流式中，结束标记还没到）
+            // 保留原始文本，不截断（让后续chunk继续累积）
+            // 但如果文本很长（>500字）且仍无结束标记，说明可能没有正式内容
+            if (text.length > 500) {
+              text = '';
             }
-          }
-
-          if (endLineIdx !== -1) {
-            text = lines.slice(endLineIdx + 1).join('\n');
+            // 否则返回原文，等待后续chunk带来结束标记
           } else {
-            // 没有找到结束标记（流式中），清空
-            text = '';
+            // 💭在中间：截断从💭到末尾
+            text = text.substring(0, thinkStart);
           }
         }
 
@@ -1219,28 +1222,12 @@
             // BUG#27修复：检查requestId，防止旧请求的chunk写入新请求的结果
             if (currentRequestId !== requestId) return;
 
-            // 垃圾内容检测：一旦检测到垃圾，丢弃后续chunk直到正式内容出现
-            if (_junkDetected) {
-              // 检查当前chunk是否包含正式话术的开始标志
-              // 正式话术特征：以称呼/礼貌用语开头（领导、您好、感谢等）
-              const formalStart = /^(领导|您好|感谢|你好|老师|老板|XX|尊敬的|亲爱的)/;
-              if (formalStart.test(chunk)) {
-                // 检测到正式内容，重置标志并开始累积
-                _junkDetected = false;
-                currentResult = chunk;
-              } else {
-                // 仍然是垃圾内容，丢弃
-                return;
-              }
-            } else {
-              currentResult += chunk;
-            }
+            // 累积所有chunk，统一由_filterThinkTags过滤
+            currentResult += chunk;
 
-            // 过滤思考标签
+            // 实时过滤思考标签/prompt复述
             const filtered = this._filterThinkTags(currentResult);
             if (filtered !== currentResult) {
-              // 过滤后内容变少，说明检测到垃圾，设置标志
-              _junkDetected = true;
               currentResult = filtered;
             }
 
