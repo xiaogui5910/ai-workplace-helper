@@ -981,17 +981,47 @@
           text = text.substring(0, first) + text.substring(second + THINK.length);
         } else if (thinkPositions.length === 1) {
           const thinkStart = thinkPositions[0];
-          if (thinkStart === 0) {
-            // 💭在开头但只有一个（流式中，结束标记还没到）
-            // 保留原始文本，不截断（让后续chunk继续累积）
-            // 但如果文本很长（>500字）且仍无结束标记，说明可能没有正式内容
-            if (text.length > 500) {
-              text = '';
+          // 无论💭在开头还是中间，都保留💭之后的内容
+          // 💭之前是prompt复述，💭之后可能是思考计划+正式内容
+          const afterThink = text.substring(thinkStart + THINK.length);
+
+          // 检查💭之后是否有"思考计划"标记（让我来写、我来写、核心要点等）
+          // 这些标记后面通常跟着正式内容
+          const planMarkers = [
+            /让我来写[：:：]/,
+            /我来写[：:：]/,
+            /核心要点[：:：]/,
+            /直奔主题[：:：]/,
+          ];
+          let planEnd = -1;
+          for (const marker of planMarkers) {
+            const match = afterThink.match(marker);
+            if (match && match.index !== undefined) {
+              // 找到标记后，跳过标记行（到下一个换行或直接取标记后的内容）
+              const afterMarker = afterThink.substring(match.index + match[0].length);
+              const newlinePos = afterMarker.indexOf('\n');
+              if (newlinePos > 0 && newlinePos < 50) {
+                planEnd = match.index + match[0].length + newlinePos + 1;
+              } else {
+                planEnd = match.index + match[0].length;
+              }
+              break;
             }
-            // 否则返回原文，等待后续chunk带来结束标记
+          }
+
+          if (planEnd > 0) {
+            // 找到思考计划结束位置，保留之后的内容
+            text = afterThink.substring(planEnd);
+          } else if (thinkStart === 0 && afterThink.length <= 500) {
+            // 💭在开头，短文本，可能是流式中——保留原文等待更多chunk
+            // 但去掉💭本身和紧随的换行
+            text = afterThink.replace(/^\s*\n+/, '');
+          } else if (thinkStart === 0 && afterThink.length > 500) {
+            // 💭在开头，长文本但仍无结束标记，清空
+            text = '';
           } else {
-            // 💭在中间：保留💭之后的内容（正式话术），删除💭之前的内容（prompt复述）
-            text = text.substring(thinkStart + THINK.length);
+            // 💭在中间，保留之后的内容
+            text = afterThink;
           }
         }
 
