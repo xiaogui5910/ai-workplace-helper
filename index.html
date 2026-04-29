@@ -1049,12 +1049,12 @@
           enable_thinking: false,
         };
 
-        // 5秒超时自动降级
+        // 30秒超时自动降级（MiniMax M2.7 响应较慢，5秒容易超时）
         let timeoutTriggered = false;
         const timeoutId = setTimeout(() => {
           timeoutTriggered = true;
           abortController.abort();
-        }, 5000);
+        }, 30000);
 
         try {
           const response = await fetch(API_CONFIG.url, {
