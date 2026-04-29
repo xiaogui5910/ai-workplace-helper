@@ -252,21 +252,6 @@
       cursor: not-allowed;
     }
 
-    /* ========== 限流提示 ========== */
-    .rate-limit-badge {
-      font-size: 11px;
-      color: #6B7280;
-      text-align: center;
-      margin-top: 6px;
-    }
-    .rate-limit-badge .remaining {
-      color: #4F46E5;
-      font-weight: 600;
-    }
-    .rate-limit-badge.exhausted {
-      color: #DC2626;
-      font-weight: 500;
-    }
 
     /* ========== 场景征集区域 ========== */
     .suggest-area {
@@ -508,10 +493,7 @@
           <span id="likeCount" class="text-xs"></span>
         </button>
       </div>
-      <!-- 限流提示 -->
-      <div id="rateLimitBadge" class="rate-limit-badge">
-        今日剩余：<span id="rateLimitRemaining" class="remaining">20/20</span>
-      </div>
+
     </section>
 
     <!-- ============================================================
@@ -684,7 +666,7 @@
       url: 'https://api.minimax.chat/v1/chat/completions',
       model: 'MiniMax-M2.7',
       // 注意：比赛作品可接受前端存储 API Key，生产环境请使用后端代理
-      apiKey: atob('c2stYXBpLWROMWpNNWpHVzZuVFE2eW9vLVJWajRBcHlKZi1NdkxQYkMtVmcxd0xiNHd0Y1M0dWItazZsMUpzOVplY1ktcjN0bWFVdk0zSmtlUUl1UkZTeHIwb1ZxNmVja1o5QmpWVnFQSHlDenRyZlZCN2wwQWZMQTh4Ylhj'),
+      apiKey: atob('c2stY3AtM1ZMWTkza3JRS01RNEdJMWpmSGNkT2FOUkRkNjFUTTQ3WFF1YkJrZmRwemFFV1NpazZfb3JtR29vdG1xNk5Bbi1teWNIWHEwUGFZc0ZMY3dVZHRYdDI0UUt6U1FJUU9YYXVVc245N1VuMENDZEgtUmJOaHljb3M='),
     };
 
     // ================================================================
@@ -729,8 +711,7 @@
     const $likeBtn = document.getElementById('likeBtn');
     const $likeBtnText = document.getElementById('likeBtnText');
     const $likeCount = document.getElementById('likeCount');
-    const $rateLimitBadge = document.getElementById('rateLimitBadge');
-    const $rateLimitRemaining = document.getElementById('rateLimitRemaining');
+
     const $networkBar = document.getElementById('networkBar');
     const $networkBarText = document.getElementById('networkBarText');
     const $statsSection = document.getElementById('statsSection');
@@ -1160,12 +1141,6 @@
         // 阶段7修复：提前锁定状态，防止竞态条件
         if (isGenerating) return;
 
-        // 强化限流：1秒内不允许重复发起请求
-        if (RateLimitModule._isTooFrequent()) {
-          ToastModule.show('操作太频繁，请稍后再试');
-          return;
-        }
-
         isGenerating = true;
 
         // BUG#2修复：递增请求ID，旧回调通过比对ID判断是否过期
@@ -1190,14 +1165,6 @@
           SceneModule.selectScene(SCENES[0]);
         }
 
-        // 限流检查
-        if (!RateLimitModule.check()) {
-          isGenerating = false; // 限流，释放锁
-          $generateBtn.disabled = true;
-          $generateBtnText.textContent = '今日次数已用完';
-          return;
-        }
-
         // 断网时直接走降级逻辑，不等待超时
         if (NetworkModule.isOffline) {
           isGenerating = false; // 降级不经过API，释放锁
@@ -1214,7 +1181,7 @@
           FallbackModule.fallback(sceneId, toneSnapshot.id);
           StatsModule.record(sceneId);
           // BUG#19修复：离线降级不消耗限流配额（不走API）
-          // RateLimitModule.increment(); // 已移除
+
           return;
         }
 
@@ -1303,8 +1270,6 @@
             if (sceneSnapshot) {
               StatsModule.record(sceneSnapshot.id);
             }
-            // 增加限流计数
-            RateLimitModule.increment();
           },
           // onError: 出错
           (error) => {
@@ -1326,8 +1291,6 @@
               if (sceneSnapshot) {
                 StatsModule.record(sceneSnapshot.id);
               }
-              // 增加限流计数
-              RateLimitModule.increment();
             } else {
               // 完全失败，使用 ErrorMapModule 显示友好错误
               const friendlyMsg = ErrorMapModule.getFriendlyMessage(error);
@@ -1344,8 +1307,6 @@
               if (sceneSnapshot) {
                 StatsModule.record(sceneSnapshot.id);
               }
-              // 增加限流计数
-              RateLimitModule.increment();
             }
           }
         );
@@ -1784,92 +1745,6 @@
     };
 
     // ================================================================
-    // RateLimitModule - 前端限流模块 (P2-07)
-    // ================================================================
-
-    const RateLimitModule = {
-      STORAGE_KEY: 'wp_daily_count',
-      DAILY_LIMIT: 100,
-      _lastRequestTime: 0, // 强化限流：1秒防抖，记录上次请求时间戳
-
-      /** 检查是否在1秒内重复请求（强化限流） */
-      _isTooFrequent() {
-        const now = Date.now();
-        if (now - this._lastRequestTime < 1000) {
-          return true;
-        }
-        this._lastRequestTime = now;
-        return false;
-      },
-
-      /** 获取今日计数数据（补充：异常值下限保护） */
-      getDailyCount() {
-        try {
-          const data = JSON.parse(localStorage.getItem(this.STORAGE_KEY));
-          const today = new Date().toISOString().split('T')[0];
-          if (data && data.date === today) {
-            // 补充修复：负数归零，超大值截断到 DAILY_LIMIT
-            const count = typeof data.count === 'number' ? data.count : 0;
-            return Math.max(0, Math.min(count, this.DAILY_LIMIT));
-          }
-          // 日期不是今天，重置
-          return 0;
-        } catch (e) {
-          return 0;
-        }
-      },
-
-      /** 增加今日计数 */
-      increment() {
-        const today = new Date().toISOString().split('T')[0];
-        const count = this.getDailyCount() + 1;
-        try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify({ date: today, count })); } catch(e) { /* 静默降级 */ }
-        this.updateUI();
-      },
-
-      /** 检查是否还能生成 */
-      check() {
-        const count = this.getDailyCount();
-        if (count >= this.DAILY_LIMIT) {
-          // 达到上限，只更新UI和提示，不操作按钮（由调用方决定）
-          $rateLimitBadge.classList.add('exhausted');
-          $rateLimitRemaining.textContent = `0/${this.DAILY_LIMIT}`;
-          // 显示提示
-          ToastModule.show('今日免费次数已用完（20/20），明天再来吧！');
-          // 补充：关键操作日志埋点
-          console.warn(`[RateLimit] 限流触发 | count=${count} | limit=${this.DAILY_LIMIT} | time=${new Date().toISOString()}`);
-          return false;
-        }
-        return true;
-      },
-
-      /** 更新限流UI显示 */
-      updateUI() {
-        const count = this.getDailyCount();
-        const remaining = this.DAILY_LIMIT - count;
-        $rateLimitRemaining.textContent = `${remaining}/${this.DAILY_LIMIT}`;
-
-        if (remaining <= 0) {
-          $rateLimitBadge.classList.add('exhausted');
-          $rateLimitRemaining.classList.remove('remaining');
-          $generateBtn.disabled = true;
-          $generateBtnText.textContent = '今日次数已用完';
-        } else if (remaining <= 5) {
-          $rateLimitBadge.classList.remove('exhausted');
-          $rateLimitRemaining.style.color = '#DC2626';
-        } else {
-          $rateLimitBadge.classList.remove('exhausted');
-          $rateLimitRemaining.style.color = '';
-        }
-      },
-
-      /** 初始化模块 */
-      init() {
-        this.updateUI();
-      }
-    };
-
-    // ================================================================
     // NetworkModule - 网络状态检测模块 (S1)
     // ================================================================
 
@@ -2183,7 +2058,6 @@
       // P2 互动功能模块
       StatsModule.init();
       LikeModule.init();
-      RateLimitModule.init();
       NetworkModule.init();
       SuggestModule.init();
 
