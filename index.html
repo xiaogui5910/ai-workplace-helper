@@ -1025,11 +1025,13 @@
           }
         }
 
-        // ===== 第三步：检测 prompt 复述 / 非话术内容 =====
-        // MiniMax M2.7 在 enable_thinking:false 时可能直接把 prompt 复述作为输出
-        // 这种情况下整个输出都是垃圾数据，应全部清空走降级
-        // 检测特征：以"一段XX的话术"、"请生成"、"当前场景"、"我需要写"等开头
-        const junkPatterns = [
+        // ===== 第三步：检测并提取正式话术（处理无特殊标记的 prompt 复述） =====
+        // MiniMax M2.7 有时直接输出纯文本：prompt复述 + "我来写..." + 正式话术
+        // 无任何💭/<think/>分隔符，需要通过内容特征提取正式话术
+        
+        // 检测是否以 junk 开头（prompt复述特征）
+        const junkStartPatterns = [
+          /^需要一段/,
           /^一段[\s\S]{0,30}话术/,
           /^请生成[\s\S]{0,30}话术/,
           /^当前场景[：:]/,
@@ -1041,9 +1043,32 @@
           /^核心要点/,
           /^直奔主题/,
         ];
-        const isJunk = junkPatterns.some(p => p.test(text));
-        if (isJunk) {
-          text = '';
+        const isJunkStart = junkStartPatterns.some(p => p.test(text));
+        
+        if (isJunkStart) {
+          // 尝试找到思考计划结束标记，提取正式话术
+          const extractMarkers = [
+            /我来写[^。？！\n]*[。？！:：]\s*\n*/,
+            /让我来写[^。？！\n]*[。？！:：]\s*\n*/,
+            /我来帮你写[^。？！\n]*[。？！:：]\s*\n*/,
+            /让我帮你写[^。？！\n]*[。？！:：]\s*\n*/,
+          ];
+          let extracted = '';
+          for (const marker of extractMarkers) {
+            const match = text.match(marker);
+            if (match) {
+              extracted = text.substring(match.index + match[0].length);
+              break;
+            }
+          }
+          
+          if (extracted.length >= 10) {
+            // 成功提取到正式话术
+            text = extracted;
+          } else {
+            // 无法提取，清空走降级
+            text = '';
+          }
         }
 
         // ===== 第四步：清理残留 =====
