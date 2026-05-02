@@ -798,6 +798,16 @@
           }
         });
 
+        // BUG#NEW修复：自定义场景复用 customSceneToggle 按钮，需特殊处理高亮
+        if (scene.id.startsWith('custom_')) {
+          $customSceneToggle.classList.add('active', 'border-indigo-500', 'bg-indigo-50', 'text-indigo-700');
+          $customSceneToggle.classList.remove('border-gray-300', 'text-gray-500');
+        } else {
+          // 切换到预置场景时，清除自定义按钮的高亮
+          $customSceneToggle.classList.remove('active', 'border-indigo-500', 'bg-indigo-50', 'text-indigo-700');
+          $customSceneToggle.classList.add('border-gray-300', 'text-gray-500');
+        }
+
         // 更新输入框 placeholder（保留已有内容）
         $situationInput.placeholder = scene.placeholder;
 
@@ -837,9 +847,7 @@
             placeholder: `例：关于「${name}」，我想说...`,
             examples: [`关于${name}，我遇到了一些困难需要沟通`, `想就${name}这个话题和对方进行有效沟通`, `在${name}的场景下，我需要一段得体的表达`],
           };
-          // BUG#22修复：给自定义场景按钮添加高亮样式
-          $customSceneToggle.classList.add('active', 'border-indigo-500', 'bg-indigo-50', 'text-indigo-700');
-          $customSceneToggle.classList.remove('border-gray-300', 'text-gray-500');
+          // 更新按钮文本（高亮由 selectScene 统一处理）
           $customSceneToggle.textContent = '✏️ ' + name;
           this.selectScene(customScene);
         });
@@ -917,163 +925,12 @@
     const AIModule = {
       /** 构建 System Prompt */
       getSystemPrompt() {
-        return '你是一位拥有10年经验的职场沟通教练，精通各类职场场景的高情商表达。你的风格是：专业但不生硬，温暖但不谄媚，坚定但不冒犯。重要：请直接输出话术内容，不要输出任何思考过程、分析过程或解释说明，不要使用<think沉思>标签。';
+        return '你是一位拥有10年经验的职场沟通教练，精通各类职场场景的高情商表达。你的风格是：专业但不生硬，温暖但不谄媚，坚定但不冒犯。';
       },
 
-      /**
-       * 过滤 MiniMax 模型返回的思考标签（彻底方案 v5）
-       * 
-       * 已知格式（全部实测确认）：
-       * 1. <think沉思>...</think沉思>（中文XML标签版）
-       * 2. <think沉思>...（未闭合，流式中）
-       * 3. <think>...</think>（英文XML标签版，截图确认）
-       * 4. <think>...（未闭合英文版）
-       * 5. <think...>...</think >（其他变体）
-       * 6. 💭...💭/💤/💡（emoji版，各种结束标记）
-       * 7. 💭...（只有开头，流式中断）
-       * 
-       * 策略：循环过滤直到没有think标签为止，再处理emoji版
-       * 
-       * @param {string} text - 包含可能的 think 标签的文本
-       * @returns {string} 过滤后的纯话术文本
-       */
+      /** 透传函数：不做任何过滤，原样返回模型输出内容 */
       _filterThinkTags(text) {
-        let originalText;
-        let maxIterations = 10;
-        
-        // ===== 第一步：循环删除所有 <think...>...</think...> XML标签块 =====
-        // 循环处理，确保嵌套或多个标签都被删除
-        do {
-          originalText = text;
-          
-          // 匹配 <think...> 到 </think...> 之间的所有内容（贪婪匹配）
-          // 修复：确保所有变体都匹配，包括 <think>, <think沉思>, <think_xxx> 等
-          text = text.replace(/<think[^>]*>[\s\S]*?<\/think\s*>/gi, '');
-          
-          // 匹配未闭合的 <think...>...（流式中可能尚未闭合）
-          text = text.replace(/<think[^>]*>[\s\S]*/gi, '');
-          
-          maxIterations--;
-        } while (text !== originalText && maxIterations > 0);
-
-        // ===== 第二步：处理 emoji 版思考块（💭 U+1F4AD） =====
-        // MiniMax M2.7 实际返回格式：
-        //   💭英文思考内容...\n💭\n\n正式话术内容
-        // 第一个💭是开始，第二个💭是结束标记
-        const THINK = '\u{1F4AD}';
-
-        if (!text.includes(THINK)) {
-          return text;
-        }
-
-        // 找所有💭的位置
-        const thinkPositions = [];
-        let pos = 0;
-        while ((pos = text.indexOf(THINK, pos)) !== -1) {
-          thinkPositions.push(pos);
-          pos += THINK.length;
-        }
-
-        if (thinkPositions.length >= 2) {
-          // 有2个及以上💭：删除从第一个💭到第二个💭（含）之间的所有内容
-          const first = thinkPositions[0];
-          const second = thinkPositions[1];
-          text = text.substring(0, first) + text.substring(second + THINK.length);
-        } else if (thinkPositions.length === 1) {
-          const thinkStart = thinkPositions[0];
-          // 无论💭在开头还是中间，都保留💭之后的内容
-          // 💭之前是prompt复述，💭之后可能是思考计划+正式内容
-          const afterThink = text.substring(thinkStart + THINK.length);
-
-          // 检查💭之后是否有"思考计划"标记（让我来写、我来写、核心要点等）
-          // 这些标记后面通常跟着正式内容
-          const planMarkers = [
-            /让我来写[：:：]/,
-            /我来写[：:：]/,
-            /核心要点[：:：]/,
-            /直奔主题[：:：]/,
-          ];
-          let planEnd = -1;
-          for (const marker of planMarkers) {
-            const match = afterThink.match(marker);
-            if (match && match.index !== undefined) {
-              // 找到标记后，跳过标记行（到下一个换行或直接取标记后的内容）
-              const afterMarker = afterThink.substring(match.index + match[0].length);
-              const newlinePos = afterMarker.indexOf('\n');
-              if (newlinePos > 0 && newlinePos < 50) {
-                planEnd = match.index + match[0].length + newlinePos + 1;
-              } else {
-                planEnd = match.index + match[0].length;
-              }
-              break;
-            }
-          }
-
-          if (planEnd > 0) {
-            // 找到思考计划结束位置，保留之后的内容
-            text = afterThink.substring(planEnd);
-          } else if (thinkStart === 0 && afterThink.length <= 500) {
-            // 💭在开头，短文本，可能是流式中——保留原文等待更多chunk
-            // 但去掉💭本身和紧随的换行
-            text = afterThink.replace(/^\s*\n+/, '');
-          } else if (thinkStart === 0 && afterThink.length > 500) {
-            // 💭在开头，长文本但仍无结束标记，清空
-            text = '';
-          } else {
-            // 💭在中间，保留之后的内容
-            text = afterThink;
-          }
-        }
-
-        // ===== 第三步：检测并提取正式话术（处理无特殊标记的 prompt 复述） =====
-        // MiniMax M2.7 有时直接输出纯文本：prompt复述 + "我来写..." + 正式话术
-        // 无任何💭/<think/>分隔符，需要通过内容特征提取正式话术
-        
-        // 检测是否以 junk 开头（prompt复述特征）
-        const junkStartPatterns = [
-          /^需要一段/,
-          /^一段[\s\S]{0,30}话术/,
-          /^请生成[\s\S]{0,30}话术/,
-          /^当前场景[：:]/,
-          /^用户情境[：:]/,
-          /^我需要写/,
-          /^我需要生成/,
-          /^用户需要/,
-          /^场景是[：:]/,
-          /^核心要点/,
-          /^直奔主题/,
-        ];
-        const isJunkStart = junkStartPatterns.some(p => p.test(text));
-        
-        if (isJunkStart) {
-          // 尝试找到思考计划结束标记，提取正式话术
-          const extractMarkers = [
-            /我来写[^。？！\n]*[。？！:：]\s*\n*/,
-            /让我来写[^。？！\n]*[。？！:：]\s*\n*/,
-            /我来帮你写[^。？！\n]*[。？！:：]\s*\n*/,
-            /让我帮你写[^。？！\n]*[。？！:：]\s*\n*/,
-          ];
-          let extracted = '';
-          for (const marker of extractMarkers) {
-            const match = text.match(marker);
-            if (match) {
-              extracted = text.substring(match.index + match[0].length);
-              break;
-            }
-          }
-          
-          if (extracted.length >= 10) {
-            // 成功提取到正式话术
-            text = extracted;
-          } else {
-            // 无法提取，清空走降级
-            text = '';
-          }
-        }
-
-        // ===== 第四步：清理残留 =====
-        text = text.replace(/^\s*\n+/, '');
-        return text;
+        return text || '';
       },
 
       /** 构建 User Prompt（M5 修复：预留 tone 参数） */
@@ -1329,6 +1186,10 @@
             $regenerateBtn.disabled = false;
 
             if (currentResult) {
+              // V3.1修复：异常路径也必须经过过滤，确保内容干净
+              currentResult = this._filterThinkTags(currentResult);
+              $resultText.textContent = currentResult;
+              $resultWordCount.textContent = `${currentResult.length} 字`;
               // 已有部分内容，保留并允许复制
               $copyBtn.disabled = false;
               // 启用点赞按钮
@@ -2076,6 +1937,10 @@
 
         // BUG#3/#18修复：取消后如果有部分内容，恢复复制/重新生成按钮
         if (currentResult) {
+          // V3.1修复：取消后也必须过滤，确保残留内容干净
+          currentResult = AIModule._filterThinkTags(currentResult);
+          $resultText.textContent = currentResult;
+          $resultWordCount.textContent = `${currentResult.length} 字`;
           $copyBtn.disabled = false;
           $regenerateBtn.disabled = false;
           LikeModule.setEnabled(true);
